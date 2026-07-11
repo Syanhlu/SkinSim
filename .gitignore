@@ -43,3 +43,6 @@ coverage/
 
 # TypeScript incremental build
 tsconfig.tsbuildinfo
+
+# Experiment run outputs (local, large, in-flight)
+MiroShark/backend/experiments/
