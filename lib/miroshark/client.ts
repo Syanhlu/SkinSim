@@ -107,7 +107,8 @@ interface MiroSharkPostsResponse {
   data?: { posts?: Array<{ content?: string; user_id?: number; created_at?: string }> };
 }
 
-type MiroSharkEnvelope<T = unknown> = { success: boolean; data?: T; error?: string };
+type MiroSharkEnvelope<T = unknown> = { success?: boolean; data?: T; error?: unknown };
+type MiroSharkRequestInit = { json?: unknown; form?: FormData; headers?: Record<string, string> };
 
 /**
  * Real client — hits a running MiroShark HTTP API (Swagger at /api/docs).
@@ -138,12 +139,13 @@ export class MiroSharkClient implements SimClient {
     } = {},
   ) {}
 
-  private async request<T = unknown>(
+  private async requestJson<T = unknown>(
+    step: string,
     method: string,
     path: string,
-    init: { json?: unknown; form?: FormData; headers?: Record<string, string> } = {},
+    init: MiroSharkRequestInit = {},
   ): Promise<T> {
-    const url = `${this.baseUrl.replace(/\/$/, "")}${path}`;
+    const url = `${this.baseUrl.trim().replace(/\/+$/, "")}${path}`;
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), this.opts.requestTimeoutMs ?? 30_000);
 
@@ -162,17 +164,23 @@ export class MiroSharkClient implements SimClient {
 
       const res = await fetch(url, fetchInit);
       const text = await res.text();
+      if (!text.trim()) {
+        throw miroStepError(step, `${method} ${path} returned an empty response body (${res.status})`);
+      }
+
       let body: unknown;
       try {
         body = JSON.parse(text);
       } catch {
-        body = text;
+        throw miroStepError(
+          step,
+          `${method} ${path} returned a non-JSON response body (${res.status}): ${excerpt(text)}`,
+        );
       }
 
-      const envelope = body as MiroSharkEnvelope;
-      if (!res.ok || envelope?.success === false) {
-        const message = typeof body === "string" ? body : envelope?.error ?? res.statusText;
-        throw new Error(`MiroShark ${method} ${path} failed (${res.status}): ${message}`);
+      if (!res.ok) {
+        const message = envelopeErrorMessage(body) ?? (res.statusText || `HTTP ${res.status}`);
+        throw miroStepError(step, `${method} ${path} failed (${res.status}): ${message}`);
       }
       return body as T;
     } finally {
@@ -180,17 +188,70 @@ export class MiroSharkClient implements SimClient {
     }
   }
 
+  private async requestEnvelope<T = unknown>(
+    step: string,
+    method: string,
+    path: string,
+    init: MiroSharkRequestInit = {},
+  ): Promise<MiroSharkEnvelope<T>> {
+    const body = await this.requestJson<MiroSharkEnvelope<T>>(step, method, path, init);
+    if (!isRecord(body)) {
+      throw miroStepError(step, `${method} ${path} returned a non-object envelope`);
+    }
+    if (body.success === false) {
+      throw miroStepError(
+        step,
+        `${method} ${path} returned success:false: ${envelopeErrorMessage(body) ?? "no error string"}`,
+      );
+    }
+    if (body.success !== true) {
+      throw miroStepError(step, `${method} ${path} returned an envelope without success:true`);
+    }
+    return body;
+  }
+
+  private async requestEnvelopeData<T = unknown>(
+    step: string,
+    method: string,
+    path: string,
+    init: MiroSharkRequestInit = {},
+  ): Promise<T> {
+    const envelope = await this.requestEnvelope<T>(step, method, path, init);
+    if (envelope.data === undefined || envelope.data === null) {
+      throw miroStepError(step, `${method} ${path} returned an envelope with missing data`);
+    }
+    return envelope.data;
+  }
+
   private async poll<T>(
     fn: () => Promise<T>,
     isDone: (result: T) => boolean,
-    { intervalMs, timeoutMs, label }: { intervalMs: number; timeoutMs: number; label: string },
+    {
+      intervalMs,
+      timeoutMs,
+      label,
+      describeResult,
+      unexpectedResult,
+    }: {
+      intervalMs: number;
+      timeoutMs: number;
+      label: string;
+      describeResult?: (result: T) => string;
+      unexpectedResult?: (result: T) => string | undefined;
+    },
   ): Promise<T> {
     const start = Date.now();
+    let last = "none";
     while (true) {
       const result = await fn();
+      last = describeResult?.(result) ?? "received";
       if (isDone(result)) return result;
+      const unexpected = unexpectedResult?.(result);
+      if (unexpected) {
+        throw miroStepError(label, unexpected);
+      }
       if (Date.now() - start > timeoutMs) {
-        throw new Error(`MiroShark ${label} timed out after ${timeoutMs}ms`);
+        throw miroStepError(label, `timed out after ${timeoutMs}ms; last status: ${last}`);
       }
       await new Promise((resolve) => setTimeout(resolve, intervalMs));
     }
@@ -217,34 +278,47 @@ export class MiroSharkClient implements SimClient {
     form.append("simulation_requirement", simulationRequirement);
     form.append("project_name", projectName);
 
-    const ontology = await this.request<MiroSharkEnvelope<{ project_id: string }>>(
+    const ontology = await this.requestEnvelopeData<{ project_id?: string }>(
+      "ontology generate",
       "POST",
       "/api/graph/ontology/generate",
       { form },
     );
-    const projectId = ontology.data!.project_id;
+    const projectId = requireString(ontology.project_id, "ontology generate", "project_id");
 
     // 2–3. Ingest the corpus into Neo4j, polling the background task to completion.
-    const build = await this.request<MiroSharkEnvelope<{ task_id: string }>>("POST", "/api/graph/build", {
-      json: { project_id: projectId },
-    });
+    const build = await this.requestEnvelopeData<{ task_id?: string }>(
+      "graph build submit",
+      "POST",
+      "/api/graph/build",
+      {
+        json: { project_id: projectId },
+      },
+    );
+    const graphTaskId = requireString(build.task_id, "graph build submit", "task_id");
     const buildTask = await this.poll(
       () =>
-        this.request<MiroSharkEnvelope<{ status: string; result?: { graph_id?: string } }>>(
+        this.requestEnvelopeData<{ status?: string; result?: { graph_id?: string } }>(
+          "graph build status",
           "GET",
-          `/api/graph/task/${build.data!.task_id}`,
+          `/api/graph/task/${graphTaskId}`,
         ),
-      (result) => result.data?.status === "completed" || result.data?.status === "failed",
-      { intervalMs: 3000, timeoutMs: this.opts.graphBuildTimeoutMs ?? 5 * 60_000, label: "graph build" },
+      (result) => ["completed", "failed"].includes(normalizeStatus(result.status)),
+      {
+        intervalMs: 3000,
+        timeoutMs: this.opts.graphBuildTimeoutMs ?? 5 * 60_000,
+        label: "graph build",
+        describeResult: (result) => statusDescription("status", result.status),
+      },
     );
-    if (buildTask.data?.status !== "completed") {
-      throw new Error("MiroShark graph build did not complete");
+    if (normalizeStatus(buildTask.status) !== "completed") {
+      throw miroStepError("graph build", `ended with ${statusDescription("status", buildTask.status)}`);
     }
-    const graphId = buildTask.data.result?.graph_id;
-    if (!graphId) throw new Error("MiroShark graph build completed with no graph_id");
+    const graphId = requireString(buildTask.result?.graph_id, "graph build", "graph_id");
 
     // 4. Create the simulation against that graph.
-    const created = await this.request<MiroSharkEnvelope<{ simulation_id: string }>>(
+    const created = await this.requestEnvelopeData<{ simulation_id?: string }>(
+      "simulation create",
       "POST",
       "/api/simulation/create",
       {
@@ -259,47 +333,80 @@ export class MiroSharkClient implements SimClient {
         },
       },
     );
-    const simulationId = created.data!.simulation_id;
+    const simulationId = requireString(created.simulation_id, "simulation create", "simulation_id");
 
     // 5–6. Generate agent profiles, polling until ready.
-    const prepared = await this.request<MiroSharkEnvelope<{ task_id: string }>>("POST", "/api/simulation/prepare", {
-      json: { simulation_id: simulationId },
-    });
+    const prepared = await this.requestEnvelopeData<{ task_id?: string }>(
+      "simulation prepare submit",
+      "POST",
+      "/api/simulation/prepare",
+      {
+        json: { simulation_id: simulationId },
+      },
+    );
+    const prepareTaskId = requireString(prepared.task_id, "simulation prepare submit", "task_id");
     const prepareStatus = await this.poll(
       () =>
-        this.request<MiroSharkEnvelope<{ status: string }>>("POST", "/api/simulation/prepare/status", {
-          json: { simulation_id: simulationId, task_id: prepared.data!.task_id },
+        this.requestEnvelopeData<{ status?: string }>("simulation prepare status", "POST", "/api/simulation/prepare/status", {
+          json: { simulation_id: simulationId, task_id: prepareTaskId },
         }),
-      (result) => result.data?.status === "ready" || result.data?.status === "failed",
-      { intervalMs: 3000, timeoutMs: this.opts.prepareTimeoutMs ?? 10 * 60_000, label: "prepare" },
+      (result) => ["ready", "failed"].includes(normalizeStatus(result.status)),
+      {
+        intervalMs: 3000,
+        timeoutMs: this.opts.prepareTimeoutMs ?? 10 * 60_000,
+        label: "simulation prepare",
+        describeResult: (result) => statusDescription("status", result.status),
+      },
     );
-    if (prepareStatus.data?.status !== "ready") {
-      throw new Error("MiroShark simulation prepare did not become ready");
+    if (normalizeStatus(prepareStatus.status) !== "ready") {
+      throw miroStepError(
+        "simulation prepare",
+        `ended with ${statusDescription("status", prepareStatus.status)}`,
+      );
     }
 
     // 7–8. Run the simulation, polling until it finishes.
     const activePlatforms = [enableThreads && "threads", enableFacebook && "facebook", enableTiktok && "tiktok"]
       .filter((v): v is string => Boolean(v));
     const platformArg = activePlatforms.length === 1 ? activePlatforms[0] : "parallel";
-    await this.request("POST", "/api/simulation/start", {
+    await this.requestEnvelope("simulation start", "POST", "/api/simulation/start", {
       json: { simulation_id: simulationId, platform: platformArg, max_rounds: maxRounds },
     });
     const runStatus = await this.poll(
       () =>
-        this.request<MiroSharkEnvelope<{ runner_status: string }>>(
+        this.requestEnvelopeData<{ runner_status?: string }>(
+          "simulation run status",
           "GET",
           `/api/simulation/${simulationId}/run-status`,
         ),
-      (result) => ["completed", "failed"].includes(result.data?.runner_status ?? ""),
-      { intervalMs: 2000, timeoutMs: this.opts.runTimeoutMs ?? 10 * 60_000, label: "run" },
+      (result) => ["completed", "failed"].includes(normalizeStatus(result.runner_status)),
+      {
+        intervalMs: 2000,
+        timeoutMs: this.opts.runTimeoutMs ?? 10 * 60_000,
+        label: "simulation run",
+        describeResult: (result) => statusDescription("runner_status", result.runner_status),
+        unexpectedResult: (result) =>
+          unexpectedStatus("runner_status", result.runner_status, [
+            "pending",
+            "queued",
+            "starting",
+            "running",
+            "in_progress",
+            "completed",
+            "failed",
+          ]),
+      },
     );
-    if (runStatus.data?.runner_status !== "completed") {
-      throw new Error("MiroShark simulation run did not complete");
+    if (normalizeStatus(runStatus.runner_status) !== "completed") {
+      throw miroStepError(
+        "simulation run",
+        `ended with ${statusDescription("runner_status", runStatus.runner_status)}`,
+      );
     }
 
     // 9–10. Publish (admin-gated — required for signal.json) and read back the verdict + citations.
     if (this.opts.adminToken) {
-      await this.request("POST", `/api/simulation/${simulationId}/publish`, {
+      await this.requestEnvelope("simulation publish", "POST", `/api/simulation/${simulationId}/publish`, {
         json: { public: true },
         headers: { authorization: `Bearer ${this.opts.adminToken}` },
       });
@@ -307,9 +414,19 @@ export class MiroSharkClient implements SimClient {
 
     const [signal, posts] = await Promise.all([
       this.opts.adminToken
-        ? this.request<MiroSharkSignal>("GET", `/api/simulation/${simulationId}/signal.json`).catch(() => null)
+        ? this.requestJson<MiroSharkSignal>(
+            "signal.json",
+            "GET",
+            `/api/simulation/${simulationId}/signal.json`,
+          ).catch(() => null)
         : Promise.resolve(null),
-      this.request<MiroSharkPostsResponse>("GET", `/api/simulation/${simulationId}/posts`).catch(() => null),
+      this.requestEnvelope<MiroSharkPostsResponse["data"]>(
+        "simulation posts",
+        "GET",
+        `/api/simulation/${simulationId}/posts`,
+      )
+        .then((envelope) => ({ success: envelope.success, data: envelope.data }))
+        .catch(() => null),
     ]);
 
     return mapVerdict(signal, posts);
@@ -352,17 +469,82 @@ function clampScore(value: unknown): number {
   return Math.max(0, Math.min(100, Math.round(scaled)));
 }
 
+function miroStepError(step: string, message: string): Error {
+  return new Error(`MiroShark step "${step}" failed: ${message}`);
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function envelopeErrorMessage(body: unknown): string | undefined {
+  if (!isRecord(body)) return undefined;
+  const error = body.error;
+  if (typeof error === "string" && error.trim()) return error;
+  if (error !== undefined) return safeStringify(error);
+  const message = body.message;
+  if (typeof message === "string" && message.trim()) return message;
+  const detail = body.detail;
+  if (typeof detail === "string" && detail.trim()) return detail;
+  return undefined;
+}
+
+function safeStringify(value: unknown): string {
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return String(value);
+  }
+}
+
+function excerpt(text: string): string {
+  return text.replace(/\s+/g, " ").trim().slice(0, 160) || "(empty)";
+}
+
+function requireString(value: unknown, step: string, field: string): string {
+  if (typeof value !== "string" || !value.trim()) {
+    throw miroStepError(step, `response data missing ${field}`);
+  }
+  return value;
+}
+
+function normalizeStatus(value: unknown): string {
+  return typeof value === "string" ? value.toLowerCase() : "";
+}
+
+function statusDescription(field: string, value: unknown): string {
+  return `${field}=${typeof value === "string" && value ? JSON.stringify(value) : "missing"}`;
+}
+
+function unexpectedStatus(field: string, value: unknown, allowed: string[]): string | undefined {
+  const normalized = normalizeStatus(value);
+  if (allowed.includes(normalized)) return undefined;
+  return `unexpected ${statusDescription(field, value)}`;
+}
+
+function envText(name: string): string | undefined {
+  const value = process.env[name]?.trim();
+  return value ? value : undefined;
+}
+
+function envNumber(name: string): number | undefined {
+  const value = envText(name);
+  if (!value) return undefined;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
 /**
  * Returns the real MiroShark client only when MIROSHARK_URL is set; otherwise the
  * deterministic mock. The mock stays the default so the app runs with zero infra.
  */
 export function getSimClient(): SimClient {
-  const url = process.env.MIROSHARK_URL;
+  const url = envText("MIROSHARK_URL");
   if (!url) return new MockSimClient();
   return new MiroSharkClient(url, {
-    apiKey: process.env.MIROSHARK_API_KEY,
-    adminToken: process.env.MIROSHARK_ADMIN_TOKEN,
-    requestTimeoutMs: process.env.MIROSHARK_TIMEOUT_MS ? Number(process.env.MIROSHARK_TIMEOUT_MS) : undefined,
+    apiKey: envText("MIROSHARK_API_KEY"),
+    adminToken: envText("MIROSHARK_ADMIN_TOKEN"),
+    requestTimeoutMs: envNumber("MIROSHARK_TIMEOUT_MS"),
   });
 }
 

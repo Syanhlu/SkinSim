@@ -130,6 +130,10 @@ export function parseHypothesis(text: string): ParsedHypothesis {
 }
 
 export function designTest(parsed: ParsedHypothesis, dailyTraffic = 1600): TestDesign {
+  if (!Number.isFinite(parsed.baseline) || parsed.baseline < 0) {
+    throw new Error("baseline must be a non-negative finite number");
+  }
+
   const power =
     parsed.metricType === "continuous"
       ? continuousPowerAnalysis({

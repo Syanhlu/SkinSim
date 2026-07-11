@@ -52,9 +52,10 @@ ability to literally ask a simulated customer why they weren't convinced.
 
 ## What doesn't exist yet (the gap we're closing)
 
-- **The two apps aren't plugged into each other yet** — the connector is designed but
-  the cable isn't in the socket. (MiroShark needs one new experiment endpoint; the
-  agent app already has the client stub waiting for it.)
+- **The A/B pipeline isn't plugged in yet** — the app now has a real, live-tested
+  MiroShark client (`lib/miroshark/client.ts`, ported 2026-07-11) that can run a
+  *single* simulation end-to-end, but MiroShark still needs the experiment endpoint
+  (Phase 2) before the app can run a full A/B test through it.
 - **The current crowd is too agreeable** — in the last test run everyone loved
   everything, so A vs B showed no difference. Fix is known: richer scenario docs
   (competitors, skeptics, price-sensitive customers) + turning on the Vietnamese
@@ -77,5 +78,7 @@ ability to literally ask a simulated customer why they weren't convinced.
 6. Pre-bake the demo experiment + record a fallback video.
 
 *The detailed build plan is [`VNG_GRAND_PLAN.md`](./VNG_GRAND_PLAN.md) — run `/goal` to
-execute it. Deeper technical status lives in `MiroShark/docs/VNG_AB_STATUS.md` and
-`vng-ab-test-agent/README.md`.*
+execute it. Deeper technical status lives in `MiroShark/docs/VNG_AB_STATUS.md`,
+`README-app.md`, and `docs/audits/` (2026-07-11 audit). Note: the product app was
+flattened to the repo root on 2026-07-11 — where this doc says `vng-ab-test-agent/`,
+read "repo root".*

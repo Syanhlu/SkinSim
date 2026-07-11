@@ -21,10 +21,10 @@ interview them about why.**
 
 | Piece | Path | Role |
 |---|---|---|
-| Sim engine | `MiroShark/` (own git repo, Flask + Vue + Neo4j) | Generates the experiment data. We add ONE new API blueprint. Never demo its Vue UI. |
-| Product app | `vng-ab-test-agent/` (Next.js 16, AI SDK v5) | The face: agent, stats engine, agent-world UI. Almost all new code lands here. |
-| Variant generation (graft source) | `vng-creative-intelligence/` | Lift `lib/gen-adapters.ts` + fallback assets only. Do NOT merge the app. |
-| Archived | `_archive/vng-balance-copilot/` | Ignore. |
+| Sim engine | `MiroShark/` (Flask + Vue + Neo4j) | Generates the experiment data. We add ONE new API blueprint. Never demo its Vue UI. |
+| Product app | **repo root** (`app/`, `lib/`, `eval/` — flattened 2026-07-11; Next.js 16, AI SDK v5) | The face: agent, stats engine, agent-world UI. Almost all new code lands here. Where phases below say `vng-ab-test-agent/`, read repo root. |
+| MiroShark client (ported) | `lib/miroshark/` + `scripts/smoke-miroshark.ts` | Live-tested 10-step single-sim client + TinyFish scrape context, grafted from creative-intelligence 2026-07-11. Phase 3 builds on this. |
+| Archived | `_archive/vng-creative-intelligence/` | Graft complete (gen-adapters → `lib/creative/`, assets → `public/creative/`, sim client → `lib/miroshark/`). Ignore. |
 
 ## Non-negotiable constraints
 
@@ -345,10 +345,9 @@ sync-scrub lock keeps both halves on the same round.
 **Goal:** variants aren't typed by hand — the agent proposes them, optionally with
 generated creative. Lift from `vng-creative-intelligence`, don't merge it.
 
-- Copy `vng-creative-intelligence/lib/gen-adapters.ts` → `vng-ab-test-agent/lib/creative/gen-adapters.ts`
-  (+ its fallback PNG concept assets into `public/creative/`). Keep its pattern: live
-  Nano Banana render when `NANO_BANANA_KEY` present, labeled fallback assets otherwise.
-  (Skip Meshy/3D — out of scope for this demo.)
+- ~~Copy `gen-adapters.ts` → `lib/creative/gen-adapters.ts` + fallback PNGs → `public/creative/`~~
+  **DONE 2026-07-11** (kept its pattern: live Nano Banana when `NANO_BANANA_KEY` present,
+  labeled fallback assets otherwise; Meshy/3D skipped as planned).
 - New `lib/creative/variants.ts`: `proposeVariants(hypothesis, brief)` — LLM
   (generateObject) returns 2–3 ad-copy variants (Vietnamese, ≤140 chars each, distinct
   angles: price / social / novelty) with a one-line strategy note each.
@@ -411,6 +410,9 @@ are the interfaces between them; do not drift from them without updating this fi
 | vng-ab-test-agent | `MIROSHARK_URL=http://localhost:5001` | real engine on |
 | vng-ab-test-agent | `MIROSHARK_INTERNAL_KEY` | server-side auth to MiroShark |
 | vng-ab-test-agent | `NANO_BANANA_KEY` (optional) | live creative gen |
+| app root `.env.local` | `MIROSHARK_ADMIN_TOKEN` | publish gate for `signal.json` (must match MiroShark `.env`; set 2026-07-11) |
+| app root `.env.local` | `TINYFISH_API_KEY` (optional) | web-scrape context for simulations |
+| app root `.env.local` | `MIROSHARK_SCRAPE_ENABLED` | opt-in flag for scrape context |
 
 ## Definition of DONE for the whole plan
 

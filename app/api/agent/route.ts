@@ -1,4 +1,11 @@
-import { streamText, tool, stepCountIs, convertToModelMessages, type UIMessage } from "ai";
+import {
+  streamText,
+  tool,
+  stepCountIs,
+  convertToModelMessages,
+  safeValidateUIMessages,
+  type UIMessage,
+} from "ai";
 import { z } from "zod";
 import { AGENT_MODEL } from "@/lib/ai";
 import {
@@ -12,6 +19,10 @@ import { getSimClient, normalizeScenario } from "@/lib/sim-client";
 import { powerAnalysis, significanceTest, type ExperimentResults } from "@/lib/stats";
 
 export const maxDuration = 60;
+
+const MAX_BODY_BYTES = 256 * 1024;
+const MAX_MESSAGES = 50;
+const MAX_TEXT_CHARS = 64 * 1024;
 
 const SYSTEM = `You are the VNG P11 A/B Test Design & Readout Agent.
 
@@ -83,103 +94,124 @@ const resultsSchema = z
   .optional();
 
 export async function POST(req: Request) {
-  const { messages }: { messages: UIMessage[] } = await req.json();
+  const parsed = await parseAgentRequest(req);
+  if (parsed instanceof Response) return parsed;
 
-  const result = streamText({
-    model: AGENT_MODEL,
-    system: SYSTEM,
-    messages: convertToModelMessages(messages),
-    tools: {
-      parse_hypothesis: tool({
-        description: "Parse a natural-language experiment hypothesis into metric, unit, direction, baseline, and MDE.",
-        inputSchema: z.object({ text: z.string() }),
-        execute: async ({ text }) => parseHypothesis(text),
-      }),
-      power_analysis: tool({
-        description: "Compute required sample size and duration using a real two-proportion power formula.",
-        inputSchema: z.object({
-          baseline: z.number(),
-          mde: z.number(),
-          alpha: z.number().default(0.05),
-          power: z.number().default(0.8),
-          dailyTraffic: z.number().default(1600),
+  if (!hasGatewayCredentials()) {
+    return jsonError(
+      503,
+      "missing_ai_gateway_credentials",
+      "AI Gateway credentials are not configured. Set AI_GATEWAY_API_KEY locally or run on Vercel with OIDC enabled.",
+    );
+  }
+
+  try {
+    const result = streamText({
+      model: AGENT_MODEL,
+      system: SYSTEM,
+      messages: convertToModelMessages(parsed.messages),
+      tools: {
+        parse_hypothesis: tool({
+          description: "Parse a natural-language experiment hypothesis into metric, unit, direction, baseline, and MDE.",
+          inputSchema: z.object({ text: z.string() }),
+          execute: async ({ text }) => parseHypothesis(text),
         }),
-        execute: async (input) => powerAnalysis(input),
-      }),
-      design_test: tool({
-        description: "Create the randomized test brief with variants, allocation, guardrails, and stop conditions.",
-        inputSchema: z.object({
-          hypothesis: z.string(),
-          dailyTraffic: z.number().default(1600),
+        power_analysis: tool({
+          description: "Compute required sample size and duration using a real two-proportion power formula.",
+          inputSchema: z.object({
+            baseline: z.number(),
+            mde: z.number(),
+            alpha: z.number().default(0.05),
+            power: z.number().default(0.8),
+            dailyTraffic: z.number().default(1600),
+          }),
+          execute: async (input) => powerAnalysis(input),
         }),
-        execute: async ({ hypothesis, dailyTraffic }) => designTest(parseHypothesis(hypothesis), dailyTraffic),
-      }),
-      significance_test: tool({
-        description:
-          "Run the correct statistical readout. Uses MiroShark mock data when explicit results are not supplied.",
-        inputSchema: z.object({
-          hypothesis: z.string().default("A red Buy button will lift purchase conversion."),
-          scenario: scenarioSchema.default("ship"),
-          results: resultsSchema,
+        design_test: tool({
+          description: "Create the randomized test brief with variants, allocation, guardrails, and stop conditions.",
+          inputSchema: z.object({
+            hypothesis: z.string(),
+            dailyTraffic: z.number().default(1600),
+          }),
+          execute: async ({ hypothesis, dailyTraffic }) => designTest(parseHypothesis(hypothesis), dailyTraffic),
         }),
-        execute: async ({ hypothesis, scenario, results }) => {
-          const parsed = parseHypothesis(hypothesis);
-          const design = designTest(parsed);
-          const resultSet =
-            results ??
-            (await getSimClient().generateExperimentResults({
-              hypothesis,
-              scenario: normalizeScenario(scenario),
-              metric: parsed.metric,
-              metricType: parsed.metricType,
-              unit: parsed.unit,
-              alpha: design.power.alpha,
-              requiredSampleSizePerVariant: design.power.sampleSizePerVariant,
-              plannedDays: design.power.durationDays,
-            }));
-          return {
-            results: resultSet,
-            significance: significanceTest(resultSet as ExperimentResults),
-          };
-        },
-      }),
-      check_guardrails: tool({
-        description: "Check retention, spend, crash, underpowered, peeking, and novelty traps.",
-        inputSchema: z.object({
-          hypothesis: z.string().default("A red Buy button will lift purchase conversion."),
-          scenario: scenarioSchema.default("ship"),
-          results: resultsSchema,
+        significance_test: tool({
+          description:
+            "Run the correct statistical readout. Uses MiroShark mock data when explicit results are not supplied.",
+          inputSchema: z.object({
+            hypothesis: z.string().default("A red Buy button will lift purchase conversion."),
+            scenario: scenarioSchema.default("ship"),
+            results: resultsSchema,
+          }),
+          execute: async ({ hypothesis, scenario, results }) => {
+            const parsed = parseHypothesis(hypothesis);
+            const design = designTest(parsed);
+            const resultSet =
+              results ??
+              (await getSimClient().generateExperimentResults({
+                hypothesis,
+                scenario: normalizeScenario(scenario),
+                metric: parsed.metric,
+                metricType: parsed.metricType,
+                unit: parsed.unit,
+                alpha: design.power.alpha,
+                requiredSampleSizePerVariant: design.power.sampleSizePerVariant,
+                plannedDays: design.power.durationDays,
+              }));
+            return {
+              results: resultSet,
+              significance: significanceTest(resultSet as ExperimentResults),
+            };
+          },
         }),
-        execute: async ({ hypothesis, scenario, results }) => {
-          const resultSet = results ?? (await generateScenarioResults(hypothesis, scenario));
-          return checkGuardrails(resultSet as ExperimentResults);
-        },
-      }),
-      recommend: tool({
-        description: "Return ship, iterate, or kill using the deterministic decision rule.",
-        inputSchema: z.object({
-          hypothesis: z.string().default("A red Buy button will lift purchase conversion."),
-          desiredDirection: z.enum(["increase", "decrease"]).default("increase"),
-          scenario: scenarioSchema.default("ship"),
-          results: resultsSchema,
+        check_guardrails: tool({
+          description: "Check retention, spend, crash, underpowered, peeking, and novelty traps.",
+          inputSchema: z.object({
+            hypothesis: z.string().default("A red Buy button will lift purchase conversion."),
+            scenario: scenarioSchema.default("ship"),
+            results: resultsSchema,
+          }),
+          execute: async ({ hypothesis, scenario, results }) => {
+            const resultSet = results ?? (await generateScenarioResults(hypothesis, scenario));
+            return checkGuardrails(resultSet as ExperimentResults);
+          },
         }),
-        execute: async ({ hypothesis, desiredDirection, scenario, results }) => {
-          const resultSet = results ?? (await generateScenarioResults(hypothesis, scenario));
-          const significance = significanceTest(resultSet as ExperimentResults);
-          const guardrails = checkGuardrails(resultSet as ExperimentResults);
-          return recommend({
-            desiredDirection: desiredDirection as Direction,
-            significance,
-            guardrails,
-            results: resultSet as ExperimentResults,
-          });
-        },
-      }),
-    },
-    stopWhen: stepCountIs(8),
+        recommend: tool({
+          description: "Return ship, iterate, or kill using the deterministic decision rule.",
+          inputSchema: z.object({
+            hypothesis: z.string().default("A red Buy button will lift purchase conversion."),
+            desiredDirection: z.enum(["increase", "decrease"]).default("increase"),
+            scenario: scenarioSchema.default("ship"),
+            results: resultsSchema,
+          }),
+          execute: async ({ hypothesis, desiredDirection, scenario, results }) => {
+            const resultSet = results ?? (await generateScenarioResults(hypothesis, scenario));
+            const significance = significanceTest(resultSet as ExperimentResults);
+            const guardrails = checkGuardrails(resultSet as ExperimentResults);
+            return recommend({
+              desiredDirection: desiredDirection as Direction,
+              significance,
+              guardrails,
+              results: resultSet as ExperimentResults,
+            });
+          },
+        }),
+      },
+      stopWhen: stepCountIs(8),
+    });
+
+    return result.toUIMessageStreamResponse({
+      onError: (error) => `Agent stream failed: ${publicErrorMessage(error)}`,
+    });
+  } catch (error) {
+    return jsonError(500, "agent_stream_failed", `Agent stream failed: ${publicErrorMessage(error)}`);
+  }
+}
+
+export function GET() {
+  return jsonError(405, "method_not_allowed", "Use POST with an AI SDK UIMessage JSON body.", {
+    Allow: "POST",
   });
-
-  return result.toUIMessageStreamResponse();
 }
 
 async function generateScenarioResults(hypothesis: string, scenario: z.infer<typeof scenarioSchema>) {
@@ -195,4 +227,104 @@ async function generateScenarioResults(hypothesis: string, scenario: z.infer<typ
     requiredSampleSizePerVariant: design.power.sampleSizePerVariant,
     plannedDays: design.power.durationDays,
   });
+}
+
+async function parseAgentRequest(req: Request): Promise<{ messages: UIMessage[] } | Response> {
+  const contentType = req.headers.get("content-type")?.toLowerCase() ?? "";
+  if (!contentType.includes("application/json")) {
+    return jsonError(415, "unsupported_media_type", "Content-Type must be application/json.");
+  }
+
+  const contentLength = Number(req.headers.get("content-length") ?? 0);
+  if (Number.isFinite(contentLength) && contentLength > MAX_BODY_BYTES) {
+    return jsonError(413, "payload_too_large", `Request body must be at most ${MAX_BODY_BYTES} bytes.`);
+  }
+
+  let rawBody: string;
+  try {
+    rawBody = await req.text();
+  } catch {
+    return jsonError(400, "body_read_failed", "Request body could not be read.");
+  }
+
+  if (rawBody.trim().length === 0) {
+    return jsonError(400, "empty_body", "Request body must be a JSON object with a messages array.");
+  }
+
+  if (new TextEncoder().encode(rawBody).length > MAX_BODY_BYTES) {
+    return jsonError(413, "payload_too_large", `Request body must be at most ${MAX_BODY_BYTES} bytes.`);
+  }
+
+  let body: unknown;
+  try {
+    body = JSON.parse(rawBody);
+  } catch {
+    return jsonError(400, "invalid_json", "Request body must be valid JSON.");
+  }
+
+  if (!isRecord(body)) {
+    return jsonError(400, "invalid_body", "Request body must be a JSON object.");
+  }
+
+  const messages = body.messages;
+  if (!Array.isArray(messages)) {
+    return jsonError(400, "invalid_messages", "messages must be an array of AI SDK UIMessage objects.");
+  }
+
+  if (messages.length === 0) {
+    return jsonError(400, "empty_messages", "messages must include at least one UIMessage.");
+  }
+
+  if (messages.length > MAX_MESSAGES) {
+    return jsonError(413, "too_many_messages", `messages must include at most ${MAX_MESSAGES} items.`);
+  }
+
+  const validation = await safeValidateUIMessages<UIMessage>({ messages });
+  if (!validation.success) {
+    return jsonError(400, "invalid_messages", `Invalid AI SDK UIMessage array: ${validation.error.message}`);
+  }
+
+  if (countTextChars(validation.data) > MAX_TEXT_CHARS) {
+    return jsonError(413, "message_too_large", `Total text content must be at most ${MAX_TEXT_CHARS} characters.`);
+  }
+
+  return { messages: validation.data };
+}
+
+function countTextChars(messages: UIMessage[]): number {
+  return messages.reduce(
+    (messageTotal, message) =>
+      messageTotal +
+      message.parts.reduce((partTotal, part) => {
+        if (part.type === "text") return partTotal + part.text.length;
+        return partTotal;
+      }, 0),
+    0,
+  );
+}
+
+function hasGatewayCredentials(): boolean {
+  return Boolean(process.env.AI_GATEWAY_API_KEY || process.env.VERCEL || process.env.VERCEL_ENV);
+}
+
+function jsonError(status: number, code: string, message: string, headers?: Record<string, string>) {
+  return Response.json(
+    { error: { code, message } },
+    {
+      status,
+      headers: {
+        "Cache-Control": "no-store",
+        ...headers,
+      },
+    },
+  );
+}
+
+function publicErrorMessage(error: unknown): string {
+  if (error instanceof Error && error.message) return error.message;
+  return "Unexpected agent error.";
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }

@@ -78,8 +78,13 @@ export function powerAnalysis(input: PowerAnalysisInput): PowerAnalysisResult {
   const alpha = input.alpha ?? 0.05;
   const power = input.power ?? 0.8;
   const dailyTraffic = input.dailyTraffic ?? 1600;
+  validateProbabilityExclusive(alpha, "alpha");
+  validateProbabilityExclusive(power, "power");
+  validatePositiveFinite(dailyTraffic, "dailyTraffic");
+  validateProbabilityInclusive(input.baseline, "baseline");
+  const requestedMde = requiredNumber(input.mde, "mde");
   const baseline = clamp(input.baseline, 0.0001, 0.9999);
-  const treatment = clamp(baseline + input.mde, 0.0001, 0.9999);
+  const treatment = clamp(baseline + requestedMde, 0.0001, 0.9999);
   const mde = Math.abs(treatment - baseline);
 
   if (!Number.isFinite(mde) || mde <= 0) {
@@ -123,8 +128,12 @@ export function continuousPowerAnalysis(input: ContinuousPowerAnalysisInput): Po
   const alpha = input.alpha ?? 0.05;
   const power = input.power ?? 0.8;
   const dailyTraffic = input.dailyTraffic ?? 1600;
-  const stdDev = input.stdDev;
-  const mde = Math.abs(input.mde);
+  const stdDev = validatePositiveFinite(input.stdDev, "stdDev");
+  const mde = Math.abs(requiredNumber(input.mde, "mde"));
+  validateProbabilityExclusive(alpha, "alpha");
+  validateProbabilityExclusive(power, "power");
+  validatePositiveFinite(dailyTraffic, "dailyTraffic");
+  requiredNumber(input.baseline, "baseline");
 
   if (!Number.isFinite(stdDev) || stdDev <= 0) {
     throw new Error("stdDev must be a positive number for a continuous power analysis");
@@ -152,6 +161,7 @@ export function continuousPowerAnalysis(input: ContinuousPowerAnalysisInput): Po
 }
 
 export function significanceTest(results: ExperimentResults): SignificanceResult {
+  validateProbabilityExclusive(results.alpha, "alpha");
   if (results.metricType === "continuous") return welchTTest(results);
   if (results.metricType === "count") return chiSquareTest(results);
   if (results.metricType === "ordinal") return mannWhitneyTest(results);
@@ -160,51 +170,71 @@ export function significanceTest(results: ExperimentResults): SignificanceResult
 
 function twoProportionZTest(results: ExperimentResults): SignificanceResult {
   const [control, treatment] = results.variants;
-  const cConversions = requiredNumber(control.conversions, "control conversions");
-  const tConversions = requiredNumber(treatment.conversions, "treatment conversions");
-  const p1 = cConversions / control.visitors;
-  const p2 = tConversions / treatment.visitors;
-  const pooled = (cConversions + tConversions) / (control.visitors + treatment.visitors);
-  const pooledSe = Math.sqrt(pooled * (1 - pooled) * (1 / control.visitors + 1 / treatment.visitors));
+  const cVisitors = requiredPositiveInteger(control.visitors, "control visitors");
+  const tVisitors = requiredPositiveInteger(treatment.visitors, "treatment visitors");
+  const cConversions = requiredCount(control.conversions, "control conversions", cVisitors);
+  const tConversions = requiredCount(treatment.conversions, "treatment conversions", tVisitors);
+  const p1 = cConversions / cVisitors;
+  const p2 = tConversions / tVisitors;
+  const pooled = (cConversions + tConversions) / (cVisitors + tVisitors);
+  const pooledSe = Math.sqrt(pooled * (1 - pooled) * (1 / cVisitors + 1 / tVisitors));
   const effect = p2 - p1;
   const z = safeDivide(effect, pooledSe);
   const pValue = twoSidedNormalP(z);
   const ciSe = Math.sqrt(
-    (p1 * (1 - p1)) / control.visitors + (p2 * (1 - p2)) / treatment.visitors,
+    (p1 * (1 - p1)) / cVisitors + (p2 * (1 - p2)) / tVisitors,
   );
   const margin = inverseNormalCdf(1 - results.alpha / 2) * ciSe;
 
   return {
     test: "two_proportion_z",
     pValue,
-    ci95: [effect - margin, effect + margin],
+    ci95: clampInterval(effect - margin, effect + margin, -1, 1),
     effect,
     effectLabel: "absolute conversion-rate lift",
     relativeLift: safeDivide(effect, p1),
     significant: pValue < results.alpha,
     direction: directionFromEffect(effect),
-    sampleSizePerVariant: { control: control.visitors, treatment: treatment.visitors },
-    details: `Compared ${cConversions}/${control.visitors} vs ${tConversions}/${treatment.visitors} with a pooled two-sided z-test.`,
+    sampleSizePerVariant: { control: cVisitors, treatment: tVisitors },
+    details: `Compared ${cConversions}/${cVisitors} vs ${tConversions}/${tVisitors} with a pooled two-sided z-test.`,
   };
 }
 
 function welchTTest(results: ExperimentResults): SignificanceResult {
   const [control, treatment] = results.variants;
-  const n1 = control.samples?.length ?? control.visitors;
-  const n2 = treatment.samples?.length ?? treatment.visitors;
-  const mean1 = control.samples ? mean(control.samples) : requiredNumber(control.mean, "control mean");
-  const mean2 = treatment.samples ? mean(treatment.samples) : requiredNumber(treatment.mean, "treatment mean");
-  const sd1 = control.samples ? sampleStandardDeviation(control.samples) : requiredNumber(control.standardDeviation, "control sd");
-  const sd2 = treatment.samples
-    ? sampleStandardDeviation(treatment.samples)
-    : requiredNumber(treatment.standardDeviation, "treatment sd");
-  const v1 = (sd1 * sd1) / n1;
-  const v2 = (sd2 * sd2) / n2;
+  const controlStats = continuousVariantStats(control, "control");
+  const treatmentStats = continuousVariantStats(treatment, "treatment");
+  const v1 = (controlStats.sd * controlStats.sd) / controlStats.n;
+  const v2 = (treatmentStats.sd * treatmentStats.sd) / treatmentStats.n;
   const se = Math.sqrt(v1 + v2);
-  const effect = mean2 - mean1;
-  const t = safeDivide(effect, se);
+  const effect = treatmentStats.mean - controlStats.mean;
+
+  if (se < 1e-12) {
+    const pValue = Math.abs(effect) < 1e-12 ? 1 : 0;
+    return {
+      test: "welch_t",
+      degreesOfFreedom: 0,
+      pValue,
+      ci95: [effect, effect],
+      effect,
+      effectLabel: `mean ${results.primaryUnit} difference`,
+      relativeLift: safeDivide(effect, controlStats.mean),
+      significant: pValue < results.alpha,
+      direction: directionFromEffect(effect),
+      sampleSizePerVariant: { control: controlStats.n, treatment: treatmentStats.n },
+      details: "Welch t-test has zero within-variant variance; compared deterministic means.",
+    };
+  }
+
+  const t = effect / se;
   // Welch–Satterthwaite degrees of freedom for unequal variances.
-  const df = safeDivide((v1 + v2) ** 2, (v1 * v1) / (n1 - 1) + (v2 * v2) / (n2 - 1));
+  const df = safeDivide(
+    (v1 + v2) ** 2,
+    (v1 * v1) / (controlStats.n - 1) + (v2 * v2) / (treatmentStats.n - 1),
+  );
+  if (!Number.isFinite(df) || df <= 0) {
+    throw new Error("Welch t-test requires positive degrees of freedom");
+  }
   // p-value from the Student t-distribution (not the normal approximation).
   const pValue = studentTTwoSidedP(t, df);
   // CI margin uses the t critical value at the Welch df, matching the p-value.
@@ -217,10 +247,10 @@ function welchTTest(results: ExperimentResults): SignificanceResult {
     ci95: [effect - margin, effect + margin],
     effect,
     effectLabel: `mean ${results.primaryUnit} difference`,
-    relativeLift: safeDivide(effect, mean1),
+    relativeLift: safeDivide(effect, controlStats.mean),
     significant: pValue < results.alpha,
     direction: directionFromEffect(effect),
-    sampleSizePerVariant: { control: n1, treatment: n2 },
+    sampleSizePerVariant: { control: controlStats.n, treatment: treatmentStats.n },
     details: `Welch t-test for unequal variance: t=${round(t, 4)}, Welch–Satterthwaite df=${round(df, 2)}.`,
   };
 }
@@ -230,20 +260,20 @@ function welchTTest(results: ExperimentResults): SignificanceResult {
 // distribution with 1 degree of freedom — not a relabeled z-test.
 function chiSquareTest(results: ExperimentResults): SignificanceResult {
   const [control, treatment] = results.variants;
-  const e1 = requiredNumber(control.events, "control events");
-  const n1 = requiredNumber(control.exposure, "control exposure");
-  const e2 = requiredNumber(treatment.events, "treatment events");
-  const n2 = requiredNumber(treatment.exposure, "treatment exposure");
+  const controlStats = countVariantStats(control, "control");
+  const treatmentStats = countVariantStats(treatment, "treatment");
+  const e1 = controlStats.events;
+  const n1 = controlStats.exposure;
+  const e2 = treatmentStats.events;
+  const n2 = treatmentStats.exposure;
   // Contingency table [[events, non-events]] for control and treatment.
   const a = e1;
   const b = n1 - e1;
   const c = e2;
   const d = n2 - e2;
   const total = n1 + n2;
-  const chiSquare = safeDivide(
-    total * (a * d - b * c) ** 2,
-    (a + b) * (c + d) * (a + c) * (b + d),
-  );
+  const denominator = (a + b) * (c + d) * (a + c) * (b + d);
+  const chiSquare = denominator === 0 ? 0 : (total * (a * d - b * c) ** 2) / denominator;
   const pValue = 1 - chiSquareCdf(chiSquare, 1);
   const p1 = e1 / n1;
   const p2 = e2 / n2;
@@ -255,7 +285,7 @@ function chiSquareTest(results: ExperimentResults): SignificanceResult {
     test: "chi_square",
     degreesOfFreedom: 1,
     pValue,
-    ci95: [effect - margin, effect + margin],
+    ci95: clampInterval(effect - margin, effect + margin, -1, 1),
     effect,
     effectLabel: `rate difference (${results.primaryUnit})`,
     relativeLift: safeDivide(effect, p1),
@@ -268,11 +298,8 @@ function chiSquareTest(results: ExperimentResults): SignificanceResult {
 
 function mannWhitneyTest(results: ExperimentResults): SignificanceResult {
   const [control, treatment] = results.variants;
-  const controlSamples = control.samples ?? [];
-  const treatmentSamples = treatment.samples ?? [];
-  if (controlSamples.length === 0 || treatmentSamples.length === 0) {
-    throw new Error("Mann-Whitney requires raw samples for both variants");
-  }
+  const controlSamples = requiredSamples(control.samples, "control samples", 1);
+  const treatmentSamples = requiredSamples(treatment.samples, "treatment samples", 1);
 
   const ranked = [...controlSamples.map((value) => ({ value, group: "control" as const })), ...treatmentSamples.map((value) => ({ value, group: "treatment" as const }))].sort(
     (a, b) => a.value - b.value,
@@ -303,8 +330,8 @@ function mannWhitneyTest(results: ExperimentResults): SignificanceResult {
     ((n1 * n2) / 12) * (n + 1 - tieCorrection / (n * (n - 1))),
   );
   // Continuity correction of 0.5 (scipy use_continuity=True default).
-  const z = safeDivide(Math.abs(u - meanU) - 0.5, sdU);
-  const pValue = 2 * (1 - normalCdf(z));
+  const z = sdU < 1e-12 ? 0 : (Math.abs(u - meanU) - 0.5) / sdU;
+  const pValue = sdU < 1e-12 ? 1 : clamp(2 * (1 - normalCdf(z)), 0, 1);
   const effect = median(treatmentSamples) - median(controlSamples);
 
   return {
@@ -379,7 +406,9 @@ export function round(value: number, digits = 4): number {
 }
 
 function twoSidedNormalP(z: number): number {
-  return 2 * (1 - normalCdf(Math.abs(z)));
+  if (Number.isNaN(z)) return 1;
+  if (Math.abs(z) < 1e-15) return 1;
+  return clamp(2 * (1 - normalCdf(Math.abs(z))), 0, 1);
 }
 
 function directionFromEffect(effect: number): "positive" | "negative" | "flat" {
@@ -390,6 +419,78 @@ function directionFromEffect(effect: number): "positive" | "negative" | "flat" {
 function requiredNumber(value: number | undefined, label: string): number {
   if (typeof value !== "number" || !Number.isFinite(value)) throw new Error(`${label} is required`);
   return value;
+}
+
+function validatePositiveFinite(value: number, label: string): number {
+  if (!Number.isFinite(value) || value <= 0) throw new Error(`${label} must be a positive finite number`);
+  return value;
+}
+
+function validateProbabilityInclusive(value: number, label: string): number {
+  if (!Number.isFinite(value) || value < 0 || value > 1) {
+    throw new Error(`${label} must be between 0 and 1`);
+  }
+  return value;
+}
+
+function validateProbabilityExclusive(value: number, label: string): number {
+  if (!Number.isFinite(value) || value <= 0 || value >= 1) {
+    throw new Error(`${label} must be between 0 and 1`);
+  }
+  return value;
+}
+
+function requiredInteger(value: number | undefined, label: string): number {
+  const number = requiredNumber(value, label);
+  if (!Number.isInteger(number)) throw new Error(`${label} must be an integer`);
+  return number;
+}
+
+function requiredPositiveInteger(value: number | undefined, label: string): number {
+  const number = requiredInteger(value, label);
+  if (number <= 0) throw new Error(`${label} must be a positive integer`);
+  return number;
+}
+
+function requiredCount(value: number | undefined, label: string, max: number): number {
+  const count = requiredInteger(value, label);
+  if (count < 0 || count > max) throw new Error(`${label} must be between 0 and ${max}`);
+  return count;
+}
+
+function continuousVariantStats(
+  variant: VariantObservation,
+  label: string,
+): { n: number; mean: number; sd: number } {
+  if (variant.samples) {
+    const samples = requiredSamples(variant.samples, `${label} samples`, 2);
+    return { n: samples.length, mean: mean(samples), sd: sampleStandardDeviation(samples) };
+  }
+
+  const n = requiredPositiveInteger(variant.visitors, `${label} visitors`);
+  if (n < 2) throw new Error(`${label} visitors must be at least 2 for Welch t-test`);
+  const variantMean = requiredNumber(variant.mean, `${label} mean`);
+  const sd = requiredNumber(variant.standardDeviation, `${label} sd`);
+  if (sd < 0) throw new Error(`${label} sd must be non-negative`);
+  return { n, mean: variantMean, sd };
+}
+
+function countVariantStats(variant: VariantObservation, label: string): { events: number; exposure: number } {
+  const exposure = requiredPositiveInteger(variant.exposure, `${label} exposure`);
+  const events = requiredCount(variant.events, `${label} events`, exposure);
+  return { events, exposure };
+}
+
+function requiredSamples(samples: number[] | undefined, label: string, minLength: number): number[] {
+  if (!samples || samples.length < minLength) {
+    throw new Error(`${label} must contain at least ${minLength} value${minLength === 1 ? "" : "s"}`);
+  }
+  if (!samples.every(Number.isFinite)) throw new Error(`${label} must contain only finite numbers`);
+  return samples;
+}
+
+function clampInterval(lower: number, upper: number, min: number, max: number): [number, number] {
+  return [clamp(lower, min, max), clamp(upper, min, max)];
 }
 
 function safeDivide(numerator: number, denominator: number): number {
@@ -496,6 +597,7 @@ export function studentTCdf(t: number, df: number): number {
 // Inverse Student t CDF via bisection (used for CI critical values).
 export function studentTQuantile(p: number, df: number): number {
   if (p <= 0 || p >= 1) throw new Error("p must be between 0 and 1");
+  if (!Number.isFinite(df) || df <= 0) throw new Error("df must be a positive finite number");
   let lo = -1000;
   let hi = 1000;
   for (let i = 0; i < 200; i++) {

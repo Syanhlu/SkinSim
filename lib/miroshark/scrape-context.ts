@@ -19,8 +19,40 @@ const TINYFISH_SEARCH_URL = "https://api.search.tinyfish.ai";
 const TINYFISH_FETCH_URL = "https://api.fetch.tinyfish.ai";
 const TINYFISH_FETCH_MAX_URLS = 10;
 
+function envText(name: string): string | undefined {
+  const value = process.env[name]?.trim();
+  return value ? value : undefined;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function positiveInteger(value: number | undefined, fallback: number): number {
+  if (value === undefined) return fallback;
+  if (!Number.isFinite(value)) return fallback;
+  return Math.max(0, Math.floor(value));
+}
+
+function asNonEmptyString(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim() ? value : undefined;
+}
+
+function toUrlDoc(value: unknown, fallbackUrl?: string): SimUrlDoc | null {
+  if (!isRecord(value)) return null;
+  const text = asNonEmptyString(value.text);
+  if (!text) return null;
+  const url = asNonEmptyString(value.url) ?? fallbackUrl;
+  if (!url) return null;
+  return {
+    title: asNonEmptyString(value.title) ?? url,
+    url,
+    text,
+  };
+}
+
 export function isTinyFishEnabled(): boolean {
-  return Boolean(process.env.TINYFISH_API_KEY);
+  return Boolean(envText("TINYFISH_API_KEY"));
 }
 
 interface TinyFishSearchResult {
@@ -33,8 +65,9 @@ interface TinyFishSearchResult {
 
 /** TinyFish Search — free, ranked web results for a query. Returns [] on any failure. */
 export async function searchWeb(query: string, limit = 5): Promise<TinyFishSearchResult[]> {
-  const key = process.env.TINYFISH_API_KEY;
+  const key = envText("TINYFISH_API_KEY");
   if (!key || !query.trim()) return [];
+  const safeLimit = positiveInteger(limit, 5);
 
   const url = new URL(TINYFISH_SEARCH_URL);
   url.searchParams.set("query", query);
@@ -44,8 +77,11 @@ export async function searchWeb(query: string, limit = 5): Promise<TinyFishSearc
   try {
     const res = await fetch(url, { headers: { "X-API-Key": key }, signal: controller.signal });
     if (!res.ok) return [];
-    const body = (await res.json()) as { results?: TinyFishSearchResult[] };
-    return (body.results ?? []).filter((r) => r.url).slice(0, limit);
+    const body = (await res.json()) as { results?: unknown };
+    const results = Array.isArray(body.results) ? body.results : [];
+    return results
+      .filter((result): result is TinyFishSearchResult => isRecord(result) && Boolean(asNonEmptyString(result.url)))
+      .slice(0, safeLimit);
   } catch {
     return [];
   } finally {
@@ -61,7 +97,7 @@ interface TinyFishFetchResult {
 
 /** TinyFish Fetch — free, batches up to 10 URLs/request, JS-rendered markdown. */
 async function fetchUrlsViaTinyFish(urls: string[]): Promise<SimUrlDoc[]> {
-  const key = process.env.TINYFISH_API_KEY;
+  const key = envText("TINYFISH_API_KEY");
   if (!key || urls.length === 0) return [];
 
   const docs: SimUrlDoc[] = [];
@@ -77,9 +113,11 @@ async function fetchUrlsViaTinyFish(urls: string[]): Promise<SimUrlDoc[]> {
         signal: controller.signal,
       });
       if (!res.ok) continue;
-      const body = (await res.json()) as { results?: TinyFishFetchResult[] };
-      for (const result of body.results ?? []) {
-        if (result.text) docs.push({ title: result.title || result.url, url: result.url, text: result.text });
+      const body = (await res.json()) as { results?: unknown };
+      const results = Array.isArray(body.results) ? body.results : [];
+      for (const result of results) {
+        const doc = toUrlDoc(result);
+        if (doc) docs.push(doc);
       }
     } catch {
       // Best-effort: a failed batch just yields fewer docs.
@@ -92,7 +130,7 @@ async function fetchUrlsViaTinyFish(urls: string[]): Promise<SimUrlDoc[]> {
 
 /** MiroShark's own scraper (Firecrawl-backed) — one URL per request. Fallback path. */
 async function fetchUrlsViaMiroShark(urls: string[]): Promise<SimUrlDoc[]> {
-  const base = process.env.MIROSHARK_URL;
+  const base = envText("MIROSHARK_URL");
   if (!base || urls.length === 0) return [];
 
   const docs = await Promise.all(
@@ -100,17 +138,15 @@ async function fetchUrlsViaMiroShark(urls: string[]): Promise<SimUrlDoc[]> {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 30_000);
       try {
-        const res = await fetch(`${base.replace(/\/$/, "")}/api/graph/fetch-url`, {
+        const res = await fetch(`${base.replace(/\/+$/, "")}/api/graph/fetch-url`, {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({ url: sourceUrl }),
           signal: controller.signal,
         });
         if (!res.ok) return null;
-        const body = (await res.json()) as { data?: { title?: string; text?: string; url?: string } };
-        const { title, text, url: resolvedUrl } = body.data ?? {};
-        if (!text) return null;
-        return { title: title || sourceUrl, url: resolvedUrl || sourceUrl, text };
+        const body = (await res.json()) as { data?: unknown };
+        return toUrlDoc(body.data, sourceUrl);
       } catch {
         return null;
       } finally {
@@ -123,9 +159,13 @@ async function fetchUrlsViaMiroShark(urls: string[]): Promise<SimUrlDoc[]> {
 
 /** Fetch full text for a list of URLs — TinyFish if configured, else MiroShark's own scraper. */
 export async function fetchUrls(urls: string[]): Promise<SimUrlDoc[]> {
-  const deduped = [...new Set(urls)];
-  if (deduped.length === 0) return [];
-  return isTinyFishEnabled() ? fetchUrlsViaTinyFish(deduped) : fetchUrlsViaMiroShark(deduped);
+  try {
+    const deduped = [...new Set(urls.map((url) => url.trim()).filter(Boolean))];
+    if (deduped.length === 0) return [];
+    return isTinyFishEnabled() ? fetchUrlsViaTinyFish(deduped) : fetchUrlsViaMiroShark(deduped);
+  } catch {
+    return [];
+  }
 }
 
 export interface ScrapeContextOptions {
@@ -147,12 +187,20 @@ export interface ScrapeContextOptions {
  * as pure enrichment, not a required step.
  */
 export async function buildScrapeContext(options: ScrapeContextOptions): Promise<SimUrlDoc[]> {
-  const maxDocs = options.maxDocs ?? 5;
-  const maxCharsPerDoc = options.maxCharsPerDoc ?? 2000;
+  try {
+    const maxDocs = positiveInteger(options.maxDocs, 5);
+    const maxCharsPerDoc = positiveInteger(options.maxCharsPerDoc, 2000);
+    if (maxDocs === 0 || maxCharsPerDoc === 0) return [];
 
-  const discovered = options.searchQuery ? await searchWeb(options.searchQuery, maxDocs) : [];
-  const candidateUrls = [...(options.referenceUrls ?? []), ...discovered.map((r) => r.url!)].slice(0, maxDocs);
+    const discovered = options.searchQuery ? await searchWeb(options.searchQuery, maxDocs) : [];
+    const candidateUrls = [...(options.referenceUrls ?? []), ...discovered.map((r) => r.url!)].slice(0, maxDocs);
 
-  const docs = await fetchUrls(candidateUrls);
-  return docs.slice(0, maxDocs).map((doc) => ({ ...doc, text: doc.text.slice(0, maxCharsPerDoc) }));
+    const docs = await fetchUrls(candidateUrls);
+    return docs
+      .filter((doc) => typeof doc.text === "string")
+      .slice(0, maxDocs)
+      .map((doc) => ({ ...doc, text: doc.text.slice(0, maxCharsPerDoc) }));
+  } catch {
+    return [];
+  }
 }
