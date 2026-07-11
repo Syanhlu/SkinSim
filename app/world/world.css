@@ -16,8 +16,9 @@
   --bubble-bg: #fffdf6;
   --card-bg: #fffdf6;
   --shadow: 0 2px 0 rgba(51, 48, 42, 0.18);
-  --hand-font: "Segoe Print", "Comic Sans MS", "Patrick Hand", cursive;
-  --body-font: ui-rounded, "Segoe UI", system-ui, sans-serif;
+  /* match the main page's brand typeface (Gilroy → Poppins stand-in) everywhere */
+  --hand-font: "SVN-Gilroy", "Gilroy", var(--font-brand), "Segoe UI", system-ui, sans-serif;
+  --body-font: "SVN-Gilroy", "Gilroy", var(--font-brand), "Segoe UI", system-ui, sans-serif;
 
   position: fixed;
   inset: 0;
@@ -135,7 +136,8 @@
   margin-top: -50px;
   cursor: pointer;
   z-index: 5;
-  transition: left 1.2s ease, top 1.2s ease;
+  /* glide continuously across rounds — linear, matched to the round interval (--step) */
+  transition: left var(--step, 1650ms) linear, top var(--step, 1650ms) linear;
   will-change: left, top;
 }
 .agent-sprite .sprite-inner {
@@ -150,6 +152,19 @@
 .agent-sprite.stance-bearish .sprite-inner { animation-duration: 4.6s; }
 .agent-sprite.stance-unknown { opacity: 0.45; }
 .agent-sprite svg { display: block; overflow: visible; }
+
+/* animated blob character (Lottie) */
+.agent-sprite .lottie-agent { width: 100%; height: 100%; transition: filter 0.5s ease; }
+.agent-sprite .lottie-agent svg { width: 100% !important; height: 100% !important; }
+/* lens halo now sits in its own overlay layer under the character */
+.agent-sprite .halo-layer {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: -1;
+}
 
 .agent-sprite .sprite-ink { stroke: var(--ink); }
 .agent-sprite .sprite-fill { fill: var(--paper-deep); }

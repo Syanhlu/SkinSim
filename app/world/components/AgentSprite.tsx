@@ -10,6 +10,7 @@ import { memo, useMemo, useSyncExternalStore } from "react";
 import type { WorldAgent } from "@/lib/world/types";
 import type { WorldStore, AgentSnapshot } from "@/lib/world/store";
 import { agentSegment, segmentColor, type LensMode } from "./DemographicLens";
+import LottieAgent from "./LottieAgent";
 
 interface AgentSpriteProps {
   agent: WorldAgent;
@@ -33,8 +34,6 @@ function AgentSpriteImpl({ agent, store, lens, silhouette, isHighlighted, onClic
     ) ?? FALLBACK_SNAPSHOT;
 
   const seed = agent.avatarSeed >>> 0;
-  const bodyType = seed % 3;
-  const headShape = Math.floor(seed / 7) % 3;
   const swayDelay = -(seed % 3400);
 
   // Bullish agents face (and lean toward) the TV at x=50; bearish turn away.
@@ -79,21 +78,12 @@ function AgentSpriteImpl({ agent, store, lens, silhouette, isHighlighted, onClic
       role="button"
       aria-label={`Interview ${agent.name}`}
     >
+      {/* lens halo under the feet */}
+      <svg className="halo-layer" viewBox="0 0 44 62" aria-hidden>
+        <ellipse className="lens-halo" cx="22" cy="59" rx="13" ry="3.4" fill={halo ?? "none"} />
+      </svg>
       <div className="sprite-inner" style={{ animationDelay: `${swayDelay}ms` }}>
-        <svg viewBox="0 0 44 62" width="100%" height="100%">
-          {/* lens halo under the feet */}
-          <ellipse className="lens-halo" cx="22" cy="59" rx="13" ry="3.4" fill={halo ?? "none"} />
-          <Body bodyType={bodyType} />
-          <Head headShape={headShape} stance={snapshot.stance} />
-          {/* bullish spark */}
-          <g className="sprite-mark mark-spark">
-            <path d="M36 8 l1.4 3.2 3.2 1.4 -3.2 1.4 -1.4 3.2 -1.4 -3.2 -3.2 -1.4 3.2 -1.4 z" />
-          </g>
-          {/* bearish scribble cloud */}
-          <g className="sprite-mark mark-cloud" fill="none" strokeWidth="1.3" strokeLinecap="round">
-            <path d="M31 6 q3 -4 6 -1 q3 3 -1 5 q-4 2 -6 -1 q-1.5 -2 1 -3 z M30 4 l3 4 M35 3 l2 5" />
-          </g>
-        </svg>
+        <LottieAgent stance={snapshot.stance} seed={seed} />
       </div>
       {isHighlighted && !silhouette && <span className="interview-flag">hỏi tôi!</span>}
       <div className="agent-tooltip">
@@ -102,60 +92,6 @@ function AgentSpriteImpl({ agent, store, lens, silhouette, isHighlighted, onClic
         <div className="tooltip-persona">{agent.personaSummary}</div>
       </div>
     </div>
-  );
-}
-
-function Body({ bodyType }: { bodyType: number }) {
-  const stroke = 2;
-  if (bodyType === 0) {
-    // stick figure
-    return (
-      <g className="sprite-ink" fill="none" strokeWidth={stroke} strokeLinecap="round">
-        <path d="M22 26 L22 46" />
-        <path d="M22 31 L13 39 M22 31 L31 38" />
-        <path d="M22 46 L15 59 M22 46 L29 59" />
-      </g>
-    );
-  }
-  if (bodyType === 1) {
-    // round belly
-    return (
-      <g strokeWidth={stroke} strokeLinecap="round">
-        <ellipse className="sprite-ink sprite-fill" cx="22" cy="38" rx="10" ry="11" />
-        <path className="sprite-ink" fill="none" d="M12 36 L6 43 M32 36 L38 42" />
-        <path className="sprite-ink" fill="none" d="M18 48 L16 59 M26 48 L28 59" />
-      </g>
-    );
-  }
-  // boxy torso
-  return (
-    <g strokeWidth={stroke} strokeLinecap="round">
-      <rect className="sprite-ink sprite-fill" x="14" y="27" width="16" height="20" rx="4" />
-      <path className="sprite-ink" fill="none" d="M14 32 L7 40 M30 32 L37 39" />
-      <path className="sprite-ink" fill="none" d="M18 47 L16 59 M26 47 L28 59" />
-    </g>
-  );
-}
-
-function Head({ headShape, stance }: { headShape: number; stance: string }) {
-  const mouth =
-    stance === "bullish" ? (
-      <path d="M18 18 q4 3.4 8 0" fill="none" strokeWidth="1.4" />
-    ) : stance === "bearish" ? (
-      <path d="M18 20 q4 -3 8 0" fill="none" strokeWidth="1.4" />
-    ) : (
-      <path d="M19 19 L26 19" fill="none" strokeWidth="1.4" />
-    );
-
-  return (
-    <g className="sprite-ink" strokeWidth="2" strokeLinecap="round">
-      {headShape === 0 && <circle className="sprite-fill" cx="22" cy="14" r="9.5" />}
-      {headShape === 1 && <rect className="sprite-fill" x="13" y="5" width="18" height="17" rx="3.5" />}
-      {headShape === 2 && <rect className="sprite-fill" x="15" y="2" width="14" height="21" rx="5" />}
-      <circle cx="18.5" cy="13" r="1.3" fill="currentColor" stroke="none" style={{ fill: "var(--ink)" }} />
-      <circle cx="25.5" cy="13" r="1.3" stroke="none" style={{ fill: "var(--ink)" }} />
-      {mouth}
-    </g>
   );
 }
 

@@ -252,8 +252,15 @@ export default function WorldApp({
     [setup],
   );
 
+  // Match the agent glide to the round interval (BASE_FRAME_MS 1500 / speed) and
+  // overlap it ~10% so movers are always mid-transition — no stop-start between rounds.
+  const stepMs = Math.round((1500 / Math.max(0.1, speed)) * 1.1);
+
   return (
-    <div className={`world-root${verdict && verdictVisible ? " verdict-open" : ""}`}>
+    <div
+      className={`world-root${verdict && verdictVisible ? " verdict-open" : ""}`}
+      style={{ ["--step"]: `${stepMs}ms` } as React.CSSProperties}
+    >
       <header className="world-header">
         <h1>Same 100 people. Two realities.</h1>
         <div className="world-subtitle">{headerSubtitle}</div>
