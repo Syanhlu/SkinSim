@@ -126,6 +126,9 @@ _BLUEPRINT_PREFIXES = {
     # activity_bp serves /api/activity.json — the what-just-completed
     # polling feed. Mounted at /api with no sub-prefix, same as status_bp.
     "activity_bp":       "/api",
+    # experiments_bp serves /api/experiments/* — the async A/B experiment
+    # job surface (create → poll → results) — see app/api/experiments.py.
+    "experiments_bp":    "/api/experiments",
 }
 
 

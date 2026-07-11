@@ -30,6 +30,22 @@ from ..models.project import ProjectManager
 logger = get_logger('miroshark.api.simulation')
 
 
+def _request_has_internal_key() -> bool:
+    """True when the caller is trusted at the internal-operator level.
+
+    Mirrors the app-level ``internal_auth_guard``: with ``MIROSHARK_INTERNAL_KEY``
+    configured, only a constant-time header match counts; with no key configured,
+    the guard only admits requests in plain local development, so a request that
+    reached a handler is the local operator. Used to relax publish gates on
+    operator telemetry (cost) without widening any public exemption.
+    """
+    internal_key = os.environ.get('MIROSHARK_INTERNAL_KEY')
+    if internal_key:
+        provided = request.headers.get('x-miroshark-internal-key')
+        return bool(provided) and hmac.compare_digest(provided, internal_key)
+    return Config.DEBUG
+
+
 @simulation_bp.before_request
 def _validate_url_simulation_id():
     """Reject requests whose URL-derived simulation_id could cause path traversal."""
@@ -6017,7 +6033,12 @@ def get_cost_json(simulation_id: str):
         except LookupError as exc:
             return jsonify({"success": False, "error": str(exc)}), 404
 
-        if not summary.get("is_public"):
+        # Internal-key-authenticated callers (the A/B experiment harness and the
+        # experiments service) may read cost for unpublished sims — experiment
+        # branches are never published, and cost is operator telemetry, not a
+        # public share surface. The public exemption list is unchanged: an
+        # anonymous caller still gets 403 on unpublished sims.
+        if not summary.get("is_public") and not _request_has_internal_key():
             return jsonify({
                 "success": False,
                 "error": _t(

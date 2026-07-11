@@ -38,3 +38,8 @@ coverage/
 
 # Vercel
 .vercel
+
+.vercel
+
+# TypeScript incremental build
+tsconfig.tsbuildinfo

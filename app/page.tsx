@@ -2,20 +2,224 @@
 
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport } from "ai";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { demoScenarios, type DemoScenario } from "@/lib/mock-results";
-import { evaluateExperiment, type Decision } from "@/lib/experiment";
-import type { MetricType } from "@/lib/stats";
+import {
+  checkGuardrails,
+  designTest,
+  parseHypothesis,
+  recommend,
+  type Decision,
+  type Direction,
+  type ParsedHypothesis,
+  type TestDesign,
+} from "@/lib/experiment";
+import type { BriefSource, HypothesisBrief } from "@/lib/extract";
+import type { ExperimentJob, ExperimentProgress } from "@/lib/sim-client";
+import { significanceTest, type ExperimentResults, type MetricType } from "@/lib/stats";
 
 const defaultHypothesis = "A red Buy button will lift purchase conversion for new players.";
+
+interface BriefForm {
+  metric: string;
+  metricType: MetricType;
+  unit: string;
+  direction: Direction;
+  baseline: string;
+  mde: string;
+  rationale: string;
+  source: BriefSource;
+}
+
+type RunPhase = "idle" | "launching" | "preparing" | "running" | "complete" | "failed";
+
+interface RunState {
+  phase: RunPhase;
+  experimentId?: string;
+  progress?: ExperimentProgress;
+  results?: ExperimentResults;
+  error?: string;
+}
+
+function briefToForm(brief: HypothesisBrief): BriefForm {
+  return {
+    metric: brief.metric,
+    metricType: brief.metricType,
+    unit: brief.unit,
+    direction: brief.direction,
+    baseline: String(brief.baseline),
+    mde: String(brief.mdeGuess),
+    rationale: brief.rationale,
+    source: brief.source,
+  };
+}
 
 export default function Home() {
   const [hypothesis, setHypothesis] = useState(defaultHypothesis);
   const [scenario, setScenario] = useState<DemoScenario>("ship");
-  const evaluation = useMemo(() => evaluateExperiment(hypothesis, scenario), [hypothesis, scenario]);
+  const [form, setForm] = useState<BriefForm>(() => briefToForm({ ...parseHypothesis(defaultHypothesis), source: "heuristic" }));
+  const [edited, setEdited] = useState(false);
+  const [extracting, setExtracting] = useState(false);
+  const [run, setRun] = useState<RunState>({ phase: "idle" });
+  const runToken = useRef(0);
+
   const { messages, sendMessage, status } = useChat({
     transport: new DefaultChatTransport({ api: "/api/agent" }),
   });
+
+  // Extract an editable brief server-side (LLM when a key is configured, deterministic
+  // heuristic otherwise — the server labels which one produced it).
+  useEffect(() => {
+    let cancelled = false;
+    setExtracting(true);
+    const timer = setTimeout(async () => {
+      let brief: HypothesisBrief;
+      try {
+        const res = await fetch("/api/experiment", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ action: "extract", hypothesis }),
+        });
+        const body = (await res.json()) as { brief?: HypothesisBrief };
+        if (!res.ok || !body.brief) throw new Error("extract failed");
+        brief = body.brief;
+      } catch {
+        brief = { ...parseHypothesis(hypothesis), source: "heuristic" };
+      }
+      if (cancelled) return;
+      setForm(briefToForm(brief));
+      setEdited(false);
+      setExtracting(false);
+      cancelInFlightRun();
+    }, 500);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hypothesis]);
+
+  const confirmedBrief = useMemo<ParsedHypothesis | null>(() => {
+    const baseline = Number(form.baseline);
+    const mde = Number(form.mde);
+    if (!Number.isFinite(baseline) || baseline < 0 || !Number.isFinite(mde) || mde === 0) return null;
+    return {
+      text: hypothesis,
+      metric: form.metric,
+      metricType: form.metricType,
+      unit: form.unit,
+      direction: form.direction,
+      baseline,
+      mdeGuess: mde,
+      stdGuess: form.metricType === "continuous" ? 2.1 : undefined,
+      rationale: form.rationale,
+    };
+  }, [form, hypothesis]);
+
+  const design = useMemo<TestDesign | null>(() => {
+    if (!confirmedBrief) return null;
+    try {
+      return designTest(confirmedBrief);
+    } catch {
+      return null;
+    }
+  }, [confirmedBrief]);
+
+  // Deterministic readout math — all numbers come from lib/stats.ts, never the model.
+  const readout = useMemo(() => {
+    if (!run.results) return null;
+    const significance = significanceTest(run.results);
+    const guardrails = checkGuardrails(run.results);
+    const recommendation = recommend({
+      desiredDirection: form.direction,
+      significance,
+      guardrails,
+      results: run.results,
+    });
+    return { significance, guardrails, recommendation };
+  }, [run.results, form.direction]);
+
+  function cancelInFlightRun() {
+    runToken.current += 1;
+    setRun({ phase: "idle" });
+  }
+
+  function updateForm(patch: Partial<BriefForm>) {
+    setForm((prev) => ({ ...prev, ...patch }));
+    setEdited(true);
+    cancelInFlightRun();
+  }
+
+  function selectScenario(next: DemoScenario) {
+    setScenario(next);
+    cancelInFlightRun();
+  }
+
+  const launch = async () => {
+    if (!design || !confirmedBrief) return;
+    runToken.current += 1;
+    const token = runToken.current;
+    setRun({ phase: "launching" });
+
+    try {
+      const createRes = await fetch("/api/experiment", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          hypothesis,
+          variants: [
+            { name: "control", text: "Current LiveOps experience." },
+            { name: "treatment", text: hypothesis },
+          ],
+          demoScenario: scenario,
+          metric: confirmedBrief.metric,
+          metricType: confirmedBrief.metricType,
+          unit: confirmedBrief.unit,
+          alpha: design.power.alpha,
+          requiredSampleSizePerVariant: design.power.sampleSizePerVariant,
+          plannedDays: design.power.durationDays,
+        }),
+      });
+      const created = (await createRes.json()) as ExperimentJob & { error?: { message?: string } };
+      if (!createRes.ok) throw new Error(created.error?.message ?? `Create failed (HTTP ${createRes.status}).`);
+      let job: ExperimentJob = created;
+      if (runToken.current !== token) return;
+      setRun({ phase: job.status === "running" ? "running" : "preparing", experimentId: job.experimentId, progress: job.progress });
+
+      for (let poll = 0; poll < 60 && job.status !== "complete" && job.status !== "failed"; poll += 1) {
+        await sleep(650);
+        const statusRes = await fetch(`/api/experiment?id=${encodeURIComponent(job.experimentId)}`);
+        const statusBody = (await statusRes.json()) as ExperimentJob & { error?: { message?: string } };
+        if (!statusRes.ok) throw new Error(statusBody.error?.message ?? `Status failed (HTTP ${statusRes.status}).`);
+        job = statusBody;
+        if (runToken.current !== token) return;
+        setRun({
+          phase: job.status === "preparing" ? "preparing" : job.status === "complete" ? "running" : "running",
+          experimentId: job.experimentId,
+          progress: job.progress,
+        });
+      }
+
+      if (job.status !== "complete") {
+        throw new Error(job.error || `Experiment ended as ${job.status}.`);
+      }
+
+      const resultsRes = await fetch(`/api/experiment?id=${encodeURIComponent(job.experimentId)}&results=1`);
+      const resultsBody = (await resultsRes.json()) as { results?: ExperimentResults; error?: { message?: string } };
+      if (!resultsRes.ok || !resultsBody.results) {
+        throw new Error(resultsBody.error?.message ?? `Results failed (HTTP ${resultsRes.status}).`);
+      }
+      // MiroShark leaves requiredSampleSizePerVariant at 0 — fill it from our power analysis.
+      const results: ExperimentResults = resultsBody.results.requiredSampleSizePerVariant
+        ? resultsBody.results
+        : { ...resultsBody.results, requiredSampleSizePerVariant: design.power.sampleSizePerVariant };
+      if (runToken.current !== token) return;
+      setRun({ phase: "complete", experimentId: job.experimentId, progress: job.progress, results });
+    } catch (error) {
+      if (runToken.current !== token) return;
+      setRun({ phase: "failed", error: error instanceof Error ? error.message : "Experiment failed." });
+    }
+  };
 
   const sendToAgent = () => {
     sendMessage({
@@ -23,16 +227,37 @@ export default function Home() {
     });
   };
 
+  const toolTrace = useMemo(() => {
+    const trace: Array<{ tool: string; output: unknown }> = [];
+    if (confirmedBrief) trace.push({ tool: "parse_hypothesis", output: { ...confirmedBrief, source: form.source, edited } });
+    if (design) {
+      trace.push({ tool: "power_analysis", output: design.power });
+      trace.push({ tool: "design_test", output: design });
+    }
+    if (run.results && readout) {
+      trace.push({ tool: "significance_test", output: readout.significance });
+      trace.push({ tool: "check_guardrails", output: readout.guardrails });
+      trace.push({ tool: "recommend", output: readout.recommendation });
+    }
+    return trace;
+  }, [confirmedBrief, design, run.results, readout, form.source, edited]);
+
+  const launchDisabled = !design || extracting || run.phase === "launching" || run.phase === "preparing" || run.phase === "running";
+
   return (
     <main className="shell">
       <section className="intro">
         <div>
-          <p className="eyebrow">VNG P11 AB-Test Agent</p>
-          <h1>Statistically sound LiveOps decisions, not LLM math.</h1>
+          <p className="eyebrow">SkinSim · Synthetic A/B Testing</p>
+          <h1>Statistically sound decisions, not LLM math.</h1>
+          <a className="world-link" href="/world?mode=replay&demo=kfc">
+            ✦ Watch the crowd react in the Agent World →
+          </a>
         </div>
         <p className="brief-note">
-          Type a hypothesis, get a powered test brief, run deterministic MiroShark mock data through real stats tools,
-          then make a ship, iterate, or kill call with traps for underpowered tests, peeking, and novelty.
+          Type a hypothesis, confirm the extracted test brief, then launch a synthetic experiment — real MiroShark
+          engine when configured, deterministic mock otherwise — and get a ship, iterate, or kill call from real
+          statistics with traps for underpowered tests, peeking, and novelty.
         </p>
       </section>
 
@@ -52,7 +277,7 @@ export default function Home() {
                 key={item.id}
                 type="button"
                 className={item.id === scenario ? "scenario active" : "scenario"}
-                onClick={() => setScenario(item.id)}
+                onClick={() => selectScenario(item.id)}
               >
                 <span>{item.label}</span>
                 <small>{item.summary}</small>
@@ -67,47 +292,160 @@ export default function Home() {
 
         <section className="card brief-card">
           <div className="card-heading">
-            <p className="eyebrow">Test Brief</p>
-            <strong>{evaluation.parsed.metric}</strong>
+            <p className="eyebrow">Test Brief · confirm before launch</p>
+            <span className={`source-badge ${form.source}`}>
+              {extracting ? "extracting…" : form.source === "agent" ? "extracted by agent" : "heuristic"}
+              {edited && !extracting ? " · edited" : ""}
+            </span>
           </div>
-          <p className="rationale">{evaluation.parsed.rationale}</p>
+          <p className="rationale">{form.rationale}</p>
+
+          <div className="brief-form">
+            <div className="field">
+              <label htmlFor="brief-metric">Metric</label>
+              <input
+                id="brief-metric"
+                type="text"
+                value={form.metric}
+                onChange={(event) => updateForm({ metric: event.target.value })}
+              />
+            </div>
+            <div className="field">
+              <label htmlFor="brief-type">Type</label>
+              <select
+                id="brief-type"
+                value={form.metricType}
+                onChange={(event) => updateForm({ metricType: event.target.value as MetricType })}
+              >
+                <option value="binary">binary</option>
+                <option value="continuous">continuous</option>
+                <option value="count">count</option>
+              </select>
+            </div>
+            <div className="field">
+              <label htmlFor="brief-baseline">Baseline</label>
+              <input
+                id="brief-baseline"
+                type="number"
+                step="any"
+                value={form.baseline}
+                onChange={(event) => updateForm({ baseline: event.target.value })}
+              />
+            </div>
+            <div className="field">
+              <label htmlFor="brief-mde">MDE</label>
+              <input
+                id="brief-mde"
+                type="number"
+                step="any"
+                value={form.mde}
+                onChange={(event) => updateForm({ mde: event.target.value })}
+              />
+            </div>
+            <div className="field">
+              <label htmlFor="brief-direction">Direction</label>
+              <select
+                id="brief-direction"
+                value={form.direction}
+                onChange={(event) => updateForm({ direction: event.target.value as Direction })}
+              >
+                <option value="increase">increase</option>
+                <option value="decrease">decrease</option>
+              </select>
+            </div>
+            <div className="field">
+              <label htmlFor="brief-unit">Unit</label>
+              <input
+                id="brief-unit"
+                type="text"
+                value={form.unit}
+                onChange={(event) => updateForm({ unit: event.target.value })}
+              />
+            </div>
+          </div>
+
           <div className="metric-grid">
-            <Metric label="Baseline" value={formatLevel(evaluation.parsed.baseline, evaluation.parsed.metricType)} />
-            <Metric label="MDE" value={formatSignedLevel(evaluation.parsed.mdeGuess, evaluation.parsed.metricType)} />
-            <Metric label="n / variant" value={evaluation.design.power.sampleSizePerVariant.toLocaleString()} />
-            <Metric label="Duration" value={`${evaluation.design.power.durationDays} days`} />
+            <Metric label="n / variant" value={design ? design.power.sampleSizePerVariant.toLocaleString() : "—"} />
+            <Metric label="Duration" value={design ? `${design.power.durationDays} days` : "—"} />
           </div>
+
           <div className="row-list">
             <Row label="Variants" value="Control vs treatment, 50/50 player-level randomization" />
-            <Row label="Stop rule" value={evaluation.design.stopConditions.join("; ")} />
-            <Row label="Guardrails" value={evaluation.design.guardrails.join("; ")} />
+            <Row label="Stop rule" value={design ? design.stopConditions.join("; ") : "Fix baseline/MDE to compute the stop rule."} />
+            <Row label="Guardrails" value={design ? design.guardrails.join("; ") : "—"} />
           </div>
+
+          <button className="launch-button" type="button" onClick={launch} disabled={launchDisabled}>
+            {run.phase === "launching" || run.phase === "preparing" || run.phase === "running"
+              ? "Experiment running…"
+              : "Launch experiment"}
+          </button>
         </section>
 
         <section className="card readout-card">
           <div className="card-heading">
             <p className="eyebrow">Readout Report · deterministic stats engine (source of truth)</p>
-            <DecisionBadge decision={evaluation.recommendation.decision} />
+            {readout ? <DecisionBadge decision={readout.recommendation.decision} /> : <span className="phase-badge">{phaseLabel(run.phase)}</span>}
           </div>
-          <p className="rationale">{evaluation.recommendation.rationale}</p>
-          <div className="metric-grid">
-            <Metric label="Test picked" value={evaluation.significance.test.replaceAll("_", " ")} />
-            <Metric label="p-value" value={formatPValue(evaluation.significance.pValue)} />
-            <Metric label="Effect" value={formatSignedLevel(evaluation.significance.effect, evaluation.parsed.metricType)} />
-            <Metric label="95% CI" value={formatCi(evaluation.significance.ci95, evaluation.parsed.metricType)} />
-          </div>
-          <div className="row-list">
-            <Row label="Sample" value={`${evaluation.results.variants[0].visitors.toLocaleString()} control / ${evaluation.results.variants[1].visitors.toLocaleString()} treatment`} />
-            <Row label="Guardrail state" value={evaluation.guardrails.passed ? "Clean" : "Needs action"} />
-            <Row
-              label="Caveats"
-              value={
-                evaluation.recommendation.caveats.length > 0
-                  ? evaluation.recommendation.caveats.join("; ")
-                  : "None"
-              }
-            />
-          </div>
+
+          {readout && run.results ? (
+            <>
+              <p className="rationale">{readout.recommendation.rationale}</p>
+              <div className="metric-grid">
+                <Metric label="Test picked" value={readout.significance.test.replaceAll("_", " ")} />
+                <Metric label="p-value" value={formatPValue(readout.significance.pValue)} />
+                <Metric label="Effect" value={formatSignedLevel(readout.significance.effect, run.results.metricType)} />
+                <Metric label="95% CI" value={formatCi(readout.significance.ci95, run.results.metricType)} />
+              </div>
+              <div className="row-list">
+                <Row
+                  label="Sample"
+                  value={`${run.results.variants[0].visitors.toLocaleString()} control / ${run.results.variants[1].visitors.toLocaleString()} treatment`}
+                />
+                <Row label="Guardrail state" value={readout.guardrails.passed ? "Clean" : "Needs action"} />
+                <Row
+                  label="Caveats"
+                  value={
+                    readout.recommendation.caveats.length > 0 ? readout.recommendation.caveats.join("; ") : "None"
+                  }
+                />
+              </div>
+            </>
+          ) : (
+            <div className="run-status">
+              {run.phase === "idle" && (
+                <p className="empty">
+                  Confirm the brief on the left, then launch. The experiment runs as an async job — create, poll,
+                  readout — against MiroShark when configured, or the deterministic mock engine otherwise.
+                </p>
+              )}
+              {(run.phase === "launching" || run.phase === "preparing") && (
+                <p className="empty">Preparing audience… spawning census-grounded personas for both variants.</p>
+              )}
+              {run.phase === "running" && (
+                <p className="empty">
+                  Running simulation…
+                  {run.progress
+                    ? ` ${run.progress.runsDone}/${run.progress.runsTotal} runs done${
+                        run.progress.runsActive ? `, ${run.progress.runsActive} active` : ""
+                      }.`
+                    : ""}
+                </p>
+              )}
+              {run.phase === "failed" && <p className="empty error-text">Experiment failed: {run.error}</p>}
+              {(run.phase === "launching" || run.phase === "preparing" || run.phase === "running") && (
+                <div className="progress-track" role="progressbar" aria-label="Experiment progress">
+                  <div
+                    className="progress-fill"
+                    style={{
+                      width: `${progressPct(run)}%`,
+                    }}
+                  />
+                </div>
+              )}
+              {run.experimentId && <p className="experiment-id">job: {run.experimentId}</p>}
+            </div>
+          )}
         </section>
       </section>
 
@@ -118,7 +456,7 @@ export default function Home() {
             <strong>Visible orchestration</strong>
           </div>
           <div className="trace-list">
-            {evaluation.toolTrace.map((item) => (
+            {toolTrace.map((item) => (
               <details key={item.tool} open={item.tool === "recommend"}>
                 <summary>{item.tool}</summary>
                 <pre>{JSON.stringify(item.output, null, 2)}</pre>
@@ -168,6 +506,28 @@ export default function Home() {
   );
 }
 
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function phaseLabel(phase: RunPhase): string {
+  if (phase === "idle") return "Awaiting launch";
+  if (phase === "launching") return "Creating job";
+  if (phase === "preparing") return "Preparing";
+  if (phase === "running") return "Running";
+  if (phase === "failed") return "Failed";
+  return "Complete";
+}
+
+function progressPct(run: RunState): number {
+  if (run.phase === "launching") return 5;
+  if (run.phase === "preparing") return 15;
+  if (run.progress && run.progress.runsTotal > 0) {
+    return Math.min(95, 20 + (run.progress.runsDone / run.progress.runsTotal) * 75);
+  }
+  return 50;
+}
+
 function Metric({ label, value }: { label: string; value: string }) {
   return (
     <div className="metric">
@@ -190,16 +550,8 @@ function DecisionBadge({ decision }: { decision: Decision }) {
   return <span className={`decision ${decision}`}>{decision.toUpperCase()}</span>;
 }
 
-function formatPct(value: number): string {
-  return `${(value * 100).toFixed(1)}%`;
-}
-
 function formatSignedPct(value: number): string {
   return `${value >= 0 ? "+" : ""}${(value * 100).toFixed(2)}pp`;
-}
-
-function formatCurrency(value: number): string {
-  return `$${value.toFixed(2)}`;
 }
 
 function formatSignedCurrency(value: number): string {
@@ -207,10 +559,6 @@ function formatSignedCurrency(value: number): string {
 }
 
 // Continuous metrics (ARPU) are dollar amounts; binary/count metrics are rates.
-function formatLevel(value: number, metricType: MetricType): string {
-  return metricType === "continuous" ? formatCurrency(value) : formatPct(value);
-}
-
 function formatSignedLevel(value: number, metricType: MetricType): string {
   return metricType === "continuous" ? formatSignedCurrency(value) : formatSignedPct(value);
 }
@@ -241,7 +589,9 @@ const styles = `
   }
 
   button,
-  textarea {
+  textarea,
+  input,
+  select {
     font: inherit;
   }
 
@@ -267,6 +617,20 @@ const styles = `
     font-weight: 700;
     letter-spacing: 0;
     text-transform: uppercase;
+  }
+
+  .world-link {
+    display: inline-block;
+    margin-top: 10px;
+    color: #8a4b2d;
+    font-size: 14px;
+    font-weight: 600;
+    text-decoration: none;
+    border-bottom: 1px dashed #8a4b2d;
+  }
+
+  .world-link:hover {
+    color: #5f3420;
   }
 
   h1 {
@@ -399,6 +763,112 @@ const styles = `
   .card-heading strong {
     font-size: 17px;
     text-align: right;
+  }
+
+  .source-badge {
+    border: 1px solid #c7c0b3;
+    border-radius: 999px;
+    padding: 6px 10px;
+    background: #fbfaf7;
+    color: #4c463c;
+    font-size: 11px;
+    font-weight: 800;
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+
+  .source-badge.agent {
+    border-color: #1d5f75;
+    background: #e7f4f6;
+    color: #14505f;
+  }
+
+  .phase-badge {
+    border-radius: 999px;
+    padding: 7px 10px;
+    background: #eee9dd;
+    color: #5c564c;
+    font-size: 12px;
+    font-weight: 900;
+    text-align: center;
+    white-space: nowrap;
+  }
+
+  .brief-form {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+    margin: 14px 0 2px;
+  }
+
+  .brief-form .field {
+    display: grid;
+    gap: 4px;
+  }
+
+  .brief-form label {
+    color: #766f63;
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+  }
+
+  .brief-form input,
+  .brief-form select {
+    width: 100%;
+    border: 1px solid #bfb7a8;
+    border-radius: 6px;
+    padding: 8px 10px;
+    color: #181714;
+    background: #fffdf8;
+  }
+
+  .launch-button {
+    width: 100%;
+    min-height: 44px;
+    margin-top: 14px;
+    border: 1px solid #14505f;
+    border-radius: 6px;
+    padding: 0 14px;
+    background: #1d5f75;
+    color: #f2fbfd;
+    font-weight: 800;
+    cursor: pointer;
+  }
+
+  .launch-button:disabled {
+    cursor: wait;
+    opacity: 0.55;
+  }
+
+  .run-status {
+    display: grid;
+    gap: 12px;
+  }
+
+  .error-text {
+    color: #8a2a24;
+  }
+
+  .experiment-id {
+    margin: 0;
+    color: #918a7c;
+    font-size: 12px;
+  }
+
+  .progress-track {
+    height: 8px;
+    border: 1px solid #d8d3c8;
+    border-radius: 999px;
+    background: #efece4;
+    overflow: hidden;
+  }
+
+  .progress-fill {
+    height: 100%;
+    background: #1d5f75;
+    border-radius: 999px;
+    transition: width 0.5s ease;
   }
 
   .metric-grid {
@@ -555,7 +1025,8 @@ const styles = `
       font-size: 38px;
     }
 
-    .metric-grid {
+    .metric-grid,
+    .brief-form {
       grid-template-columns: 1fr;
     }
   }

@@ -14,6 +14,10 @@ mcp_bp = Blueprint('mcp', __name__)
 docs_bp = Blueprint('docs', __name__)
 feed_bp = Blueprint('feed', __name__)
 countries_bp = Blueprint('countries', __name__)
+# experiments_bp serves /api/experiments/* — the async A/B experiment
+# job surface (create → poll status → fetch results). HTTP counterpart
+# of scripts/ab_experiment.py; see app/api/experiments.py.
+experiments_bp = Blueprint('experiments', __name__)
 
 from . import graph  # noqa: E402, F401
 from . import simulation  # noqa: E402, F401
@@ -25,6 +29,7 @@ from . import mcp  # noqa: E402, F401
 from . import docs  # noqa: E402, F401
 from . import feed  # noqa: E402, F401
 from . import countries  # noqa: E402, F401
+from . import experiments  # noqa: E402, F401
 
 # share_bp is mounted at the root (no /api prefix) so the public landing
 # URL stays clean — see api/share.py.

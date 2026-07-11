@@ -86,6 +86,8 @@ tags:
     description: Search-engine sitemap and robots.txt — auto-generated discovery surfaces over the public-simulation gallery.
   - name: Platform
     description: Platform-level aggregate stats (total sims, consensus distribution, surface views) — the first endpoints that describe MiroShark itself, not a single simulation.
+  - name: Experiments
+    description: Async A/B experiment jobs — one prepared parent simulation, one counterfactual branch per variant×replicate, run to completion in a background worker, results mapped to a pooled binary-metric contract. HTTP counterpart of scripts/ab_experiment.py. All routes require the internal key.
 
 paths:
 
@@ -4909,6 +4911,232 @@ paths:
                 properties:
                   status: { type: string, example: ok }
                   service: { type: string, example: MiroShark Backend }
+
+  # ────────────────────────────────────────────────────────────────────
+  # Experiments
+  # ────────────────────────────────────────────────────────────────────
+
+  /api/experiments/ab-test:
+    post:
+      tags: [Experiments]
+      summary: Create an async A/B experiment and start it in a background worker.
+      description: |
+        Everything `scripts/ab_experiment.py` does, as a create-then-poll
+        HTTP job: prepare (or reuse) one parent simulation, branch one
+        counterfactual run per variant×replicate, start runs with a bounded
+        active-run count, poll to completion, collect metrics, compute
+        stats, and write `state.json` / `results.json` / `report.md` under
+        `backend/uploads/experiments/<experiment_id>/`.
+
+        **Single worker per instance** — a second create while one
+        experiment is active returns `409`. State is persisted after every
+        transition, so a backend restart never loses finished work.
+
+        Unlike most endpoints this returns the job object directly (no
+        `{"success": ..., "data": ...}` envelope) — the response bodies of
+        the `/api/experiments/*` surface are consumed verbatim against
+        TypeScript contracts by the product app.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [hypothesis, variants]
+              properties:
+                hypothesis:
+                  type: string
+                  description: Free text, stored with the experiment for the report.
+                scenario:
+                  type: string
+                  description: Parent scenario text. Provide this OR `parent_simulation_id`, not both.
+                parent_simulation_id:
+                  type: string
+                  description: Reuse an existing prepared parent simulation.
+                variants:
+                  type: array
+                  minItems: 2
+                  description: At least two ad variants with unique names.
+                  items:
+                    type: object
+                    required: [name, text]
+                    properties:
+                      name: { type: string, example: A }
+                      text: { type: string, example: "Gà Rán Giòn Cay — combo 89k" }
+                replicates: { type: integer, minimum: 1, default: 3 }
+                parallel: { type: integer, minimum: 1, default: 2 }
+                trigger_round: { type: integer, minimum: 0, default: 0 }
+      responses:
+        "202":
+          description: Experiment accepted and started in the background.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  experiment_id: { type: string, example: exp_ab12cd34 }
+                  parent_simulation_id:
+                    type: [string, "null"]
+                    description: Null when the parent is created from scenario text — it appears in the status payload once the parent simulation exists.
+                  status: { type: string, example: preparing }
+        "400":
+          description: Neither scenario nor parent_simulation_id, fewer than 2 variants, or otherwise invalid input.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error: { type: string }
+        "409":
+          description: Another experiment is actively running (single worker per instance).
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error: { type: string }
+
+  /api/experiments/{experiment_id}/status:
+    get:
+      tags: [Experiments]
+      summary: Poll an experiment — status, progress, per-run states.
+      parameters:
+        - in: path
+          name: experiment_id
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Current experiment state (read from disk, restart-safe).
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  experiment_id: { type: string }
+                  status:
+                    type: string
+                    enum: [preparing, running, complete, failed]
+                  progress:
+                    type: object
+                    properties:
+                      runs_total: { type: integer, example: 6 }
+                      runs_done: { type: integer, example: 2 }
+                      runs_active: { type: integer, example: 2 }
+                      current_round_max: { type: [integer, "null"], example: 31 }
+                      rounds_per_run: { type: [integer, "null"], example: 48 }
+                  runs:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        variant: { type: string, example: A }
+                        replicate: { type: integer, example: 1 }
+                        simulation_id: { type: [string, "null"] }
+                        state: { type: string, example: completed }
+                        rounds_done: { type: [integer, "null"] }
+                  parent_simulation_id: { type: [string, "null"] }
+                  error: { type: [string, "null"] }
+        "404":
+          description: Unknown experiment id.
+
+  /api/experiments/{experiment_id}/results:
+    get:
+      tags: [Experiments]
+      summary: Final results in the product app's ExperimentResults contract.
+      description: |
+        Available only once the experiment is `complete` (`409` otherwise).
+
+        **Stance→binary mapping rule:** each agent's final stance from
+        belief-drift is one Bernoulli observation — `visitors` = Σ agents
+        across all completed replicates of a variant, `conversions` =
+        Σ bullish agents. Per-replicate means stay in `raw` / `notes` for
+        honesty about clustering; no per-agent data is invented. The first
+        variant is reported as `control`, the second as `treatment`.
+      parameters:
+        - in: path
+          name: experiment_id
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: ExperimentResults payload plus a `raw` extension.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id: { type: string, example: exp_ab12cd34 }
+                  metric: { type: string, example: positive stance rate }
+                  metricType: { type: string, example: binary }
+                  primaryUnit: { type: string, example: agents }
+                  alpha: { type: number, example: 0.05 }
+                  requiredSampleSizePerVariant:
+                    type: integer
+                    example: 0
+                    description: Filled in by the product app from its own power analysis.
+                  plannedDays: { type: integer, example: 1 }
+                  observedDays: { type: integer, example: 1 }
+                  variants:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        name: { type: string, example: control }
+                        visitors: { type: integer, example: 300 }
+                        conversions: { type: integer, example: 141 }
+                  guardrails: { type: array, items: { type: object } }
+                  notes:
+                    type: array
+                    items: { type: string }
+                    example: ["replicate means A: [46.0%, 48.0%, 47.0%]"]
+                  raw:
+                    type: object
+                    properties:
+                      per_replicate:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            variant: { type: string, example: A }
+                            replicate: { type: integer, example: 1 }
+                            simulation_id: { type: string }
+                            bullish_pct: { type: [number, "null"], example: 46.0 }
+                            agents: { type: [integer, "null"], example: 100 }
+                            amm_yes_probability: { type: [number, "null"], example: 0.44 }
+                      per_demographic:
+                        type: array
+                        description: Passthrough of the per-segment winner table.
+                        items: { type: object }
+                      welch_cli:
+                        type: object
+                        description: The CLI harness's own replicate-level Welch t-test block, for cross-checking.
+        "404":
+          description: Unknown experiment id.
+        "409":
+          description: Experiment is not complete (still preparing/running, or failed).
+
+  /api/experiments/list:
+    get:
+      tags: [Experiments]
+      summary: Every experiment on disk, newest first.
+      responses:
+        "200":
+          description: Experiment index (reads uploads/experiments).
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  experiments:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        experiment_id: { type: string }
+                        status: { type: string, enum: [preparing, running, complete, failed] }
+                        created_at: { type: string, format: date-time }
+                        hypothesis: { type: string }
 
 components:
 

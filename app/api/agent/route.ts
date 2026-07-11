@@ -15,7 +15,8 @@ import {
   recommend,
   type Direction,
 } from "@/lib/experiment";
-import { getSimClient, normalizeScenario } from "@/lib/sim-client";
+import { extractHypothesis } from "@/lib/extract";
+import { generateExperimentResults, getSimClient, normalizeScenario } from "@/lib/sim-client";
 import { powerAnalysis, significanceTest, type ExperimentResults } from "@/lib/stats";
 
 export const maxDuration = 60;
@@ -39,7 +40,11 @@ Default chain:
 6. recommend
 
 If a user asks for a trap case, use scenario underpowered, peeking, novelty, guardrail, or flat.
-Always explain which statistical test was selected and why, but quote only tool-returned numbers.`;
+Always explain which statistical test was selected and why, but quote only tool-returned numbers.
+
+To actually run a synthetic experiment, call run_experiment (returns a job) and then poll
+get_experiment_status to narrate progress; when it is complete the status tool returns the
+results plus the deterministic significance readout — quote those numbers only.`;
 
 const scenarioSchema = z.enum(["ship", "underpowered", "peeking", "novelty", "guardrail", "flat"]);
 const metricTypeSchema = z.enum(["binary", "continuous", "count", "ordinal"]);
@@ -112,9 +117,10 @@ export async function POST(req: Request) {
       messages: convertToModelMessages(parsed.messages),
       tools: {
         parse_hypothesis: tool({
-          description: "Parse a natural-language experiment hypothesis into metric, unit, direction, baseline, and MDE.",
+          description:
+            "Extract a natural-language experiment hypothesis into metric, unit, direction, baseline, and MDE. Uses LLM structured extraction with a deterministic heuristic fallback; the returned `source` field says which one produced the brief.",
           inputSchema: z.object({ text: z.string() }),
-          execute: async ({ text }) => parseHypothesis(text),
+          execute: async ({ text }) => extractHypothesis(text),
         }),
         power_analysis: tool({
           description: "Compute required sample size and duration using a real two-proportion power formula.",
@@ -144,24 +150,66 @@ export async function POST(req: Request) {
             results: resultsSchema,
           }),
           execute: async ({ hypothesis, scenario, results }) => {
-            const parsed = parseHypothesis(hypothesis);
-            const design = designTest(parsed);
-            const resultSet =
-              results ??
-              (await getSimClient().generateExperimentResults({
-                hypothesis,
-                scenario: normalizeScenario(scenario),
-                metric: parsed.metric,
-                metricType: parsed.metricType,
-                unit: parsed.unit,
-                alpha: design.power.alpha,
-                requiredSampleSizePerVariant: design.power.sampleSizePerVariant,
-                plannedDays: design.power.durationDays,
-              }));
+            const resultSet = results ?? (await generateScenarioResults(hypothesis, scenario));
             return {
               results: resultSet,
               significance: significanceTest(resultSet as ExperimentResults),
             };
+          },
+        }),
+        propose_variants: tool({
+          description:
+            "Propose 2-3 Vietnamese ad-copy variants (price/social/novelty angles) with strategy notes for a hypothesis. Labeled 'agent' or deterministic 'fallback'. The human edits before launch.",
+          inputSchema: z.object({
+            hypothesis: z.string(),
+            metric: z.string().optional(),
+            direction: z.string().optional(),
+          }),
+          execute: async ({ hypothesis, metric, direction }) => {
+            const { proposeVariants } = await import("@/lib/creative/variants");
+            return proposeVariants(hypothesis, { metric, direction });
+          },
+        }),
+        run_experiment: tool({
+          description:
+            "Create a synthetic A/B experiment job (real MiroShark engine when configured, deterministic mock otherwise). Returns { experimentId, status } — poll with get_experiment_status.",
+          inputSchema: z.object({
+            hypothesis: z.string(),
+            variants: z
+              .array(z.object({ name: z.string(), text: z.string() }))
+              .min(2)
+              .default([
+                { name: "control", text: "Current LiveOps experience." },
+                { name: "treatment", text: "Proposed change from the hypothesis." },
+              ]),
+            scenario: scenarioSchema.default("ship"),
+          }),
+          execute: async ({ hypothesis, variants, scenario }) => {
+            const parsed = parseHypothesis(hypothesis);
+            const design = designTest(parsed);
+            return getSimClient().createExperiment({
+              hypothesis,
+              variants,
+              demoScenario: normalizeScenario(scenario),
+              metric: parsed.metric,
+              metricType: parsed.metricType,
+              unit: parsed.unit,
+              alpha: design.power.alpha,
+              requiredSampleSizePerVariant: design.power.sampleSizePerVariant,
+              plannedDays: design.power.durationDays,
+            });
+          },
+        }),
+        get_experiment_status: tool({
+          description:
+            "Poll a running experiment job. While preparing/running, returns progress to narrate. When complete, also returns the results and the deterministic significance readout.",
+          inputSchema: z.object({ experimentId: z.string() }),
+          execute: async ({ experimentId }) => {
+            const client = getSimClient();
+            const job = await client.getStatus(experimentId);
+            if (job.status !== "complete") return { job };
+            const results = await client.getResults(experimentId);
+            return { job, results, significance: significanceTest(results) };
           },
         }),
         check_guardrails: tool({
@@ -197,7 +245,8 @@ export async function POST(req: Request) {
           },
         }),
       },
-      stopWhen: stepCountIs(8),
+      // run_experiment + ~8 status polls + readout tools need more steps than the old chain.
+      stopWhen: stepCountIs(16),
     });
 
     return result.toUIMessageStreamResponse({
@@ -214,10 +263,12 @@ export function GET() {
   });
 }
 
+// Deterministic mock-path results for tools that need immediate data (the async job
+// interface is exposed separately via run_experiment/get_experiment_status).
 async function generateScenarioResults(hypothesis: string, scenario: z.infer<typeof scenarioSchema>) {
   const parsed = parseHypothesis(hypothesis);
   const design = designTest(parsed);
-  return getSimClient().generateExperimentResults({
+  return generateExperimentResults({
     hypothesis,
     scenario: normalizeScenario(scenario),
     metric: parsed.metric,
