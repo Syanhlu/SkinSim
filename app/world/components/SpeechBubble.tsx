@@ -20,7 +20,7 @@ interface ActiveBubble {
   y: number;
 }
 
-export function BubbleField({ store }: { store: WorldStore }) {
+export function BubbleField({ store, hiddenAgentId }: { store: WorldStore; hiddenAgentId?: string | null }) {
   const meta = useSyncExternalStore(store.subscribeMeta, store.getMeta, store.getMeta);
   const [bubbles, setBubbles] = useState<ActiveBubble[]>([]);
   const queue = useRef<FramePost[]>([]);
@@ -69,21 +69,36 @@ export function BubbleField({ store }: { store: WorldStore }) {
 
   return (
     <>
-      {bubbles.map((bubble) => (
-        <div
-          key={bubble.key}
-          className="speech-bubble"
-          style={{
-            // Clamp into the half's safe zone so edge bubbles neither clip
-            // off-screen nor collapse into one-word-per-line columns.
-            left: `${Math.min(84, Math.max(11, bubble.x))}%`,
-            top: `${Math.max(9, bubble.y - 9)}%`,
-          }}
-        >
-          {bubble.text}
-          <span className="bubble-platform">{bubble.platform === "threads" ? "@threads" : "fb"}</span>
-        </div>
-      ))}
+      {bubbles.map((bubble) => {
+        // Follow the speaker: re-read their LIVE position each frame (meta drives
+        // the re-render) so the bubble stays pinned above the agent as it walks,
+        // gliding in lockstep via the same --step transition. Falls back to the
+        // spawn position if the agent snapshot is momentarily missing.
+        const snap = store.getAgentSnapshot(bubble.agentId);
+        const x = snap?.x ?? bubble.x;
+        const y = snap?.y ?? bubble.y;
+        // Top-of-field speakers would push their bubble up into the header — flip
+        // it to hang below the head instead (like the persona card does).
+        const below = y < 26;
+        return (
+          <div
+            key={bubble.key}
+            className={`speech-bubble${below ? " below" : ""}`}
+            data-agent-id={bubble.agentId}
+            style={{
+              // Clamp into the half's safe zone so edge bubbles neither clip
+              // off-screen nor collapse into one-word-per-line columns.
+              left: `${Math.min(84, Math.max(11, x))}%`,
+              top: below ? `${y + 2}%` : `${Math.max(6, y - 3)}%`,
+              // hide this agent's speech while its persona card is open on hover
+              visibility: hiddenAgentId === bubble.agentId ? "hidden" : undefined,
+            }}
+          >
+            {bubble.text}
+            <span className="bubble-platform">{bubble.platform === "threads" ? "@threads" : "fb"}</span>
+          </div>
+        );
+      })}
     </>
   );
 }

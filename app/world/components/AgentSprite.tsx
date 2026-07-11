@@ -20,11 +20,13 @@ interface AgentSpriteProps {
   /** Agent has pre-recorded interview answers — marked so replay users click the right people. */
   isHighlighted?: boolean;
   onClick?: (agent: WorldAgent) => void;
+  /** Report hover so the bubble field can suppress this agent's speech bubble. */
+  onHover?: (agentId: string | null) => void;
 }
 
 const FALLBACK_SNAPSHOT: AgentSnapshot = { stance: "unknown", x: 50, y: 70, talking: false };
 
-function AgentSpriteImpl({ agent, store, lens, silhouette, isHighlighted, onClick }: AgentSpriteProps) {
+function AgentSpriteImpl({ agent, store, lens, silhouette, isHighlighted, onClick, onHover }: AgentSpriteProps) {
   const subscribe = useMemo(() => store.subscribeAgent(agent.id), [store, agent.id]);
   const snapshot =
     useSyncExternalStore(
@@ -74,7 +76,10 @@ function AgentSpriteImpl({ agent, store, lens, silhouette, isHighlighted, onClic
         .filter(Boolean)
         .join(" ")}
       style={{ left: `${snapshot.x}%`, top: `${snapshot.y}%`, rotate: `${lean}deg` }}
+      data-agent-id={agent.id}
       onClick={() => onClick?.(agent)}
+      onMouseEnter={() => onHover?.(agent.id)}
+      onMouseLeave={() => onHover?.(null)}
       role="button"
       aria-label={`Interview ${agent.name}`}
     >

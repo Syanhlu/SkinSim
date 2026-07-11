@@ -5,6 +5,7 @@
 // TV at the center of the half, speech bubbles on top. Positions are % based
 // so resizing is safe.
 
+import { useCallback, useState } from "react";
 import type { WorldAgent, WorldTimeline } from "@/lib/world/types";
 import type { WorldStore } from "@/lib/world/store";
 import AgentSprite from "./AgentSprite";
@@ -33,6 +34,12 @@ export default function WorldCanvas({
   highlighted?: Set<string>;
   onAgentClick?: (agent: WorldAgent) => void;
 }) {
+  // Which agent the cursor is over — used to hide that agent's speech bubble so
+  // it doesn't collide with the persona hover card. Stable callback keeps the
+  // memoized sprites from re-rendering on hover; only BubbleField reacts.
+  const [hoveredId, setHoveredId] = useState<string | null>(null);
+  const onHover = useCallback((id: string | null) => setHoveredId(id), []);
+
   return (
     <div className={`world-half ${variantClass}`}>
       <div className="world-ground" />
@@ -49,9 +56,10 @@ export default function WorldCanvas({
           silhouette={silhouette}
           isHighlighted={highlighted?.has(agent.id)}
           onClick={onAgentClick}
+          onHover={onHover}
         />
       ))}
-      <BubbleField store={store} />
+      <BubbleField store={store} hiddenAgentId={hoveredId} />
     </div>
   );
 }

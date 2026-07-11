@@ -216,10 +216,11 @@
 /* silhouettes while preparing */
 .agent-sprite.silhouette { opacity: 0.28; filter: grayscale(1); pointer-events: none; }
 
-.agent-sprite:hover { z-index: 9; }
+/* lift the hovered agent (and its persona card) above the TV, header and bubbles */
+.agent-sprite:hover { z-index: 130; }
 .agent-tooltip {
   position: absolute;
-  bottom: 104%;
+  bottom: 72%;
   left: 50%;
   transform: translateX(-50%) scale(0.9);
   opacity: 0;
@@ -305,22 +306,36 @@
   font-size: 11px;
   line-height: 1.35;
   color: var(--ink);
-  z-index: 25;
+  /* top layer — above header/controls; pointer-events:none keeps them clickable */
+  z-index: 120;
   box-shadow: var(--shadow);
   animation: bubble-pop 0.25s ease-out, bubble-fade 0.5s ease 3.4s forwards;
   pointer-events: none;
+  /* glide with the speaker (same timing as the agent) so it stays attached */
+  transition: left var(--step, 1650ms) linear, top var(--step, 1650ms) linear;
 }
 .speech-bubble::after {
   content: "";
   position: absolute;
   bottom: -7px;
-  left: 24px;
+  left: 50%;
+  margin-left: -5px; /* centered tail points down at the speaker */
   width: 10px;
   height: 10px;
   background: var(--bubble-bg);
   border-right: 1.5px solid var(--ink);
   border-bottom: 1.5px solid var(--ink);
   transform: rotate(45deg) skew(8deg, 8deg);
+}
+/* top-of-field speakers: bubble hangs below the head, tail points up */
+.speech-bubble.below { transform: translate(-50%, 8px); }
+.speech-bubble.below::after {
+  top: -7px;
+  bottom: auto;
+  border-right: none;
+  border-bottom: none;
+  border-top: 1.5px solid var(--ink);
+  border-left: 1.5px solid var(--ink);
 }
 .speech-bubble .bubble-platform {
   font-size: 9px;
