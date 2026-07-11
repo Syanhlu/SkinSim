@@ -63,6 +63,10 @@ export default function Home() {
   const [edited, setEdited] = useState(false);
   const [extracting, setExtracting] = useState(false);
   const [run, setRun] = useState<RunState>({ phase: "idle" });
+  // The live engine runs a real multi-hour, paid simulation. It is an explicit
+  // opt-in with its own market-context field; the default is the instant preview.
+  const [liveEngine, setLiveEngine] = useState(false);
+  const [scenarioText, setScenarioText] = useState("");
   const runToken = useRef(0);
 
   const { messages, sendMessage, status } = useChat({
@@ -159,12 +163,13 @@ export default function Home() {
 
   const launch = async () => {
     if (!design || !confirmedBrief) return;
+    const useLive = liveEngine && scenarioText.trim().length > 0;
     runToken.current += 1;
     const token = runToken.current;
     setRun({ phase: "launching" });
 
     try {
-      const createRes = await fetch("/api/experiment", {
+      const createRes = await fetch(useLive ? "/api/experiment" : "/api/experiment?sim=mock", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
@@ -173,6 +178,7 @@ export default function Home() {
             { name: "control", text: "Current LiveOps experience." },
             { name: "treatment", text: hypothesis },
           ],
+          scenario: useLive ? scenarioText.trim() : undefined,
           demoScenario: scenario,
           metric: confirmedBrief.metric,
           metricType: confirmedBrief.metricType,
@@ -189,15 +195,20 @@ export default function Home() {
       };
       if (!createRes.ok) throw new Error(created.error?.message ?? `Create failed (HTTP ${createRes.status}).`);
       let job: ExperimentJob = created;
-      // The proxy falls back to the mock engine when MiroShark is unreachable —
-      // keep polling the same engine and tell the operator.
-      const simParam = created.engine === "mock" ? "&sim=mock" : "";
-      const engineNote = created.engineNote;
+      // The proxy falls back to the preview engine when the live engine is
+      // unreachable; keep polling the same engine and tell the operator.
+      const simParam = !useLive || created.engine === "mock" ? "&sim=mock" : "";
+      const engineNote =
+        created.engineNote ?? (useLive ? "live simulation engine" : "instant simulated preview");
       if (runToken.current !== token) return;
       setRun({ phase: job.status === "running" ? "running" : "preparing", experimentId: job.experimentId, progress: job.progress, engineNote });
 
-      for (let poll = 0; poll < 60 && job.status !== "complete" && job.status !== "failed"; poll += 1) {
-        await sleep(650);
+      // Preview completes in seconds; a live run takes an hour or more, so poll
+      // gently and never fake a failure just because the tab got bored.
+      const pollDelay = useLive && !simParam ? 5000 : 650;
+      const maxPolls = useLive && !simParam ? 1440 : 60;
+      for (let poll = 0; poll < maxPolls && job.status !== "complete" && job.status !== "failed"; poll += 1) {
+        await sleep(pollDelay);
         const statusRes = await fetch(`/api/experiment?id=${encodeURIComponent(job.experimentId)}${simParam}`);
         const statusBody = (await statusRes.json()) as ExperimentJob & { error?: { message?: string } };
         if (!statusRes.ok) throw new Error(statusBody.error?.message ?? `Status failed (HTTP ${statusRes.status}).`);
@@ -212,7 +223,18 @@ export default function Home() {
       }
 
       if (job.status !== "complete") {
-        throw new Error(job.error || `Experiment ended as ${job.status}.`);
+        if (job.status === "failed") {
+          throw new Error(job.error || "The engine reported a failure.");
+        }
+        // Still running after the polling window (live runs are long). Leave the
+        // job visible instead of pretending it failed.
+        setRun({
+          phase: "running",
+          experimentId: job.experimentId,
+          progress: job.progress,
+          engineNote: "Still running on the live engine. Keep this tab open, or note the job id and check back.",
+        });
+        return;
       }
 
       const resultsRes = await fetch(`/api/experiment?id=${encodeURIComponent(job.experimentId)}&results=1${simParam}`);
@@ -253,14 +275,20 @@ export default function Home() {
     return trace;
   }, [confirmedBrief, design, run.results, readout, form.source, edited]);
 
-  const launchDisabled = !design || extracting || run.phase === "launching" || run.phase === "preparing" || run.phase === "running";
+  const launchDisabled =
+    !design ||
+    extracting ||
+    (liveEngine && scenarioText.trim().length === 0) ||
+    run.phase === "launching" ||
+    run.phase === "preparing" ||
+    run.phase === "running";
 
   return (
     <main className="shell">
       <section className="intro">
         <div>
           <p className="eyebrow">SkinSim</p>
-          <h1>Know which idea wins — before you spend real money.</h1>
+          <h1>Know which idea wins before you spend real money.</h1>
           <a className="world-link" href="/world?mode=replay&demo=kfc">
             Watch a simulated Vietnamese crowd react live →
           </a>
@@ -268,7 +296,7 @@ export default function Home() {
         <p className="brief-note">
           Describe what you want to test. We build the test for you, show it to a simulated
           audience of realistic Vietnamese consumers, and give you a clear answer:
-          <strong> ship it, improve it, or drop it</strong> — backed by real statistics.
+          <strong> ship it, improve it, or drop it</strong>, backed by real statistics.
         </p>
       </section>
 
@@ -380,6 +408,32 @@ export default function Home() {
                 />
               </div>
             </div>
+            <label className="live-toggle">
+              <input
+                type="checkbox"
+                checked={liveEngine}
+                onChange={(event) => setLiveEngine(event.target.checked)}
+              />
+              <span>
+                <strong>Run on the live engine</strong>
+                <small>
+                  Simulates a real crowd with AI agents. Costs real API money and takes an hour
+                  or more. Off by default: the instant preview uses canned data and is free.
+                </small>
+              </span>
+            </label>
+            {liveEngine && (
+              <div className="field">
+                <label htmlFor="live-scenario">Market context (required for live runs)</label>
+                <textarea
+                  id="live-scenario"
+                  rows={4}
+                  value={scenarioText}
+                  onChange={(event) => setScenarioText(event.target.value)}
+                  placeholder="Describe the market: product, competitors, audience segments, current mood. The richer this is, the more the simulated crowd disagrees like a real one."
+                />
+              </div>
+            )}
           </details>
 
           <div className="metric-grid">
@@ -388,7 +442,7 @@ export default function Home() {
           </div>
 
           <div className="row-list">
-            <Row label="Versions" value="Two versions — each shown to half the audience, split fairly" />
+            <Row label="Versions" value="Two versions, each shown to half the audience, split fairly" />
             <Row label="When we stop" value={design ? design.stopConditions.join("; ") : "Fill in the two numbers above to compute this."} />
             <Row label="Safety checks" value={design ? design.guardrails.join("; ") : "—"} />
           </div>
@@ -396,8 +450,13 @@ export default function Home() {
           <button className="launch-button" type="button" onClick={launch} disabled={launchDisabled}>
             {run.phase === "launching" || run.phase === "preparing" || run.phase === "running"
               ? "Test running…"
-              : "Run the test"}
+              : liveEngine
+                ? "Run the deep simulation"
+                : "Run the test"}
           </button>
+          {liveEngine && scenarioText.trim().length === 0 && (
+            <p className="hint">Add the market context above to enable the live run.</p>
+          )}
         </section>
 
         <section className="card readout-card">
@@ -470,7 +529,7 @@ export default function Home() {
       </section>
 
       <details className="under-hood">
-        <summary>Under the hood — how every number was computed (for the curious)</summary>
+        <summary>Under the hood: how every number was computed (for the curious)</summary>
         <section className="lower-grid">
         <section className="card">
           <div className="card-heading">
@@ -496,7 +555,7 @@ export default function Home() {
             {messages.length === 0 ? (
               <p className="empty">
                 Press &quot;Ask the AI assistant&quot; to have the AI walk through the same test and
-                narrate it. It never does the math itself — every number comes from the same
+                narrate it. It never does the math itself; every number comes from the same
                 statistics engine as the result card.
               </p>
             ) : (
@@ -645,10 +704,10 @@ const styles = `
   .intro::before {
     content: "";
     position: absolute;
-    right: -60px;
-    top: -40px;
-    width: 380px;
-    height: 200px;
+    right: -120px;
+    top: -90px;
+    width: 300px;
+    height: 150px;
     border-radius: 50%;
     border: 2px solid var(--vng-orange-tint);
     border-top-color: transparent;
@@ -656,6 +715,8 @@ const styles = `
     transform: rotate(-14deg);
     pointer-events: none;
   }
+
+  .intro > * { position: relative; z-index: 1; }
 
   .eyebrow {
     margin: 0 0 10px;
@@ -880,6 +941,61 @@ const styles = `
   }
 
   .advanced summary:hover { color: var(--vng-orange); }
+
+  .live-toggle {
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+    background: var(--wash);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-sm);
+    padding: 11px 13px;
+    margin: 10px 0 12px;
+    cursor: pointer;
+  }
+
+  .live-toggle input {
+    margin-top: 3px;
+    accent-color: var(--vng-orange);
+    width: 15px;
+    height: 15px;
+    flex: none;
+  }
+
+  .live-toggle strong { display: block; font-size: 13.5px; }
+
+  .live-toggle small {
+    display: block;
+    margin-top: 3px;
+    color: var(--ink-soft);
+    font-size: 12px;
+    line-height: 1.5;
+  }
+
+  .field textarea {
+    font-family: inherit;
+    font-size: 13.5px;
+    line-height: 1.55;
+    color: var(--ink);
+    background: var(--wash);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-sm);
+    padding: 9px 11px;
+    resize: vertical;
+  }
+
+  .field textarea:focus-visible {
+    outline: none;
+    border-color: var(--vng-orange);
+    box-shadow: 0 0 0 3px var(--vng-orange-tint);
+  }
+
+  .hint {
+    margin: 8px 0 0;
+    font-size: 12.5px;
+    color: var(--ink-faint);
+    text-align: center;
+  }
 
   .source-badge {
     font-size: 12px;

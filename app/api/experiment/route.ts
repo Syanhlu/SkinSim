@@ -125,7 +125,7 @@ export async function POST(req: Request) {
     if (isEngineUnreachable(error)) {
       try {
         const job = await getSimClient({ sim: "mock" }).createExperiment(input);
-        return jsonOk({ ...job, engine: "mock", engineNote: "MiroShark unreachable — deterministic mock engine" }, 202);
+        return jsonOk({ ...job, engine: "mock", engineNote: "Live engine unreachable, ran the instant simulated preview instead" }, 202);
       } catch {
         return simError(error, "create_failed");
       }

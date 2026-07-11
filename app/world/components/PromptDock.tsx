@@ -49,16 +49,16 @@ export default function PromptDock({
       };
       const variants = Array.isArray(body.variants) ? body.variants : [];
       if (!res.ok || variants.length < 2) {
-        setProposalNote("Could not propose variants — write them by hand.");
+        setProposalNote("Could not propose variants. Write them by hand.");
         return;
       }
       setVariantA(variants[0].text);
       setVariantB(variants[1].text);
       setProposalNote(
-        `${body.source === "agent" ? "Agent" : "Fallback"} proposal: A = ${variants[0].angle} angle, B = ${variants[1].angle} angle — edit freely.`,
+        `${body.source === "agent" ? "Agent" : "Fallback"} proposal: A = ${variants[0].angle} angle, B = ${variants[1].angle} angle. Edit freely.`,
       );
     } catch {
-      setProposalNote("Could not propose variants — write them by hand.");
+      setProposalNote("Could not propose variants. Write them by hand.");
     } finally {
       setProposing(false);
     }
@@ -81,7 +81,7 @@ export default function PromptDock({
         }),
       });
       if (res.status === 404) {
-        setNotice("Engine offline — staying in replay mode.");
+        setNotice("Engine offline, staying in replay mode.");
         return;
       }
       let body: Record<string, unknown> | null = null;
@@ -92,17 +92,17 @@ export default function PromptDock({
       }
       if (!res.ok || !body) {
         const message = body && typeof body.error === "string" ? body.error : `HTTP ${res.status}`;
-        setNotice(`Could not launch (${message}) — staying in replay mode.`);
+        setNotice(`Could not launch (${message}), staying in replay mode.`);
         return;
       }
       const experimentId = firstString(body, ["experimentId", "experiment_id", "id"]);
       if (!experimentId) {
-        setNotice("Engine answered without an experiment id — staying in replay mode.");
+        setNotice("Engine answered without an experiment id, staying in replay mode.");
         return;
       }
       onLaunched(experimentId);
     } catch {
-      setNotice("Engine offline — staying in replay mode.");
+      setNotice("Engine offline, staying in replay mode.");
     } finally {
       setBusy(false);
     }
@@ -125,7 +125,7 @@ export default function PromptDock({
         <input
           value={hypothesis}
           onChange={(event) => setHypothesis(event.target.value)}
-          placeholder="Hypothesis — e.g. A voucher-first promo lifts purchase intent…"
+          placeholder="Hypothesis, e.g. a voucher-first promo lifts purchase intent…"
         />
       </div>
       <div className="dock-row">

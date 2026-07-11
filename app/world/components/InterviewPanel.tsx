@@ -104,7 +104,7 @@ export default function InterviewPanel({
       return { text: canned[asked % canned.length].answer, source: "canned" };
     }
     return {
-      text: "『engine offline』 — nhân vật này chưa có câu trả lời thu sẵn. Hãy thử một nhân vật được đánh dấu.",
+      text: "『engine offline』 nhân vật này chưa có câu trả lời thu sẵn. Hãy thử một nhân vật được đánh dấu.",
       source: "offline",
     };
   }
