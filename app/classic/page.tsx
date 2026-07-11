@@ -15,6 +15,7 @@ import {
   type TestDesign,
 } from "@/lib/experiment";
 import type { BriefSource, HypothesisBrief } from "@/lib/extract";
+import type { SimUrlDoc } from "@/lib/miroshark/client";
 import type { ExperimentJob, ExperimentProgress } from "@/lib/sim-client";
 import { significanceTest, type ExperimentResults, type MetricType } from "@/lib/stats";
 
@@ -67,6 +68,10 @@ export default function Home() {
   // opt-in with its own market-context field; the default is the instant preview.
   const [liveEngine, setLiveEngine] = useState(false);
   const [scenarioText, setScenarioText] = useState("");
+  const [scrapeQuery, setScrapeQuery] = useState("");
+  const [scraping, setScraping] = useState(false);
+  const [scrapeDocs, setScrapeDocs] = useState<SimUrlDoc[]>([]);
+  const [scrapeError, setScrapeError] = useState<string | null>(null);
   const runToken = useRef(0);
 
   const { messages, sendMessage, status } = useChat({
@@ -254,6 +259,34 @@ export default function Home() {
     }
   };
 
+  const runScrape = async () => {
+    const query = scrapeQuery.trim() || hypothesis.trim();
+    if (!query) return;
+    setScraping(true);
+    setScrapeError(null);
+    try {
+      const res = await fetch("/api/experiment", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ action: "scrape", searchQuery: query }),
+      });
+      const body = (await res.json()) as { docs?: SimUrlDoc[]; error?: { message?: string } };
+      if (!res.ok) throw new Error(body.error?.message ?? `Research failed (HTTP ${res.status}).`);
+      const docs = body.docs ?? [];
+      setScrapeDocs(docs);
+      if (docs.length === 0) {
+        setScrapeError("No sources found. Try a different query, or add market context manually.");
+        return;
+      }
+      const researched = docs.map((doc) => `Source: ${doc.title} (${doc.url})\n${doc.text}`).join("\n\n");
+      setScenarioText((prev) => (prev.trim() ? `${prev.trim()}\n\n${researched}` : researched));
+    } catch (error) {
+      setScrapeError(error instanceof Error ? error.message : "Research failed.");
+    } finally {
+      setScraping(false);
+    }
+  };
+
   const sendToAgent = () => {
     sendMessage({
       text: `Design and read out this experiment using scenario "${scenario}": ${hypothesis}`,
@@ -425,6 +458,30 @@ export default function Home() {
             {liveEngine && (
               <div className="field">
                 <label htmlFor="live-scenario">Market context (required for live runs)</label>
+                <div className="scrape-row">
+                  <input
+                    id="scrape-query"
+                    type="text"
+                    value={scrapeQuery}
+                    onChange={(event) => setScrapeQuery(event.target.value)}
+                    placeholder="Search the web for market context (defaults to your hypothesis)"
+                  />
+                  <button type="button" className="scrape-button" onClick={runScrape} disabled={scraping}>
+                    {scraping ? "Researching…" : "Research the web"}
+                  </button>
+                </div>
+                {scrapeError && <p className="hint error">{scrapeError}</p>}
+                {scrapeDocs.length > 0 && (
+                  <ul className="scrape-sources">
+                    {scrapeDocs.map((doc) => (
+                      <li key={doc.url}>
+                        <a href={doc.url} target="_blank" rel="noreferrer">
+                          {doc.title}
+                        </a>
+                      </li>
+                    ))}
+                  </ul>
+                )}
                 <textarea
                   id="live-scenario"
                   rows={4}
@@ -1002,6 +1059,54 @@ const styles = `
     color: var(--ink-faint);
     text-align: center;
   }
+
+  .hint.error {
+    color: var(--vng-orange-deep);
+    text-align: left;
+  }
+
+  .scrape-row {
+    display: flex;
+    gap: 8px;
+  }
+
+  .scrape-row input {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .scrape-button {
+    flex: none;
+    font-family: inherit;
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--ink);
+    background: var(--wash);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-sm);
+    padding: 0 14px;
+    cursor: pointer;
+    transition: border-color 0.15s ease, background 0.15s ease;
+  }
+
+  .scrape-button:hover:not(:disabled) { border-color: var(--vng-orange); }
+  .scrape-button:disabled { opacity: 0.5; cursor: default; }
+
+  .scrape-sources {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+  }
+
+  .scrape-sources a {
+    font-size: 12px;
+    color: var(--ink-soft);
+  }
+
+  .scrape-sources a:hover { color: var(--vng-orange-deep); }
 
   .source-badge {
     font-size: 12px;

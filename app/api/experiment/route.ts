@@ -57,6 +57,12 @@ const variantsSchema = z.object({
   direction: z.string().max(40).optional(),
 });
 
+const scrapeSchema = z.object({
+  action: z.literal("scrape"),
+  searchQuery: z.string().max(200).optional(),
+  referenceUrls: z.array(z.string().url()).max(10).optional(),
+});
+
 export async function POST(req: Request) {
   const bodyOrError = await readJsonBody(req);
   if (bodyOrError instanceof Response) return bodyOrError;
@@ -90,6 +96,23 @@ export async function POST(req: Request) {
       direction: parsed.data.direction,
     });
     return jsonOk(proposal);
+  }
+
+  // Web research: server-side so TinyFish/MiroShark URLs never reach the browser.
+  // Best-effort by design (buildScrapeContext never throws) — returns fewer docs
+  // rather than failing when nothing is configured or a fetch fails.
+  if (isRecord(body) && body.action === "scrape") {
+    const parsed = scrapeSchema.safeParse(body);
+    if (!parsed.success) {
+      return jsonError(400, "invalid_body", formatZodError(parsed.error));
+    }
+    const { searchQuery, referenceUrls } = parsed.data;
+    if (!searchQuery?.trim() && !referenceUrls?.length) {
+      return jsonError(400, "invalid_body", "Provide a searchQuery or at least one referenceUrl.");
+    }
+    const { buildScrapeContext } = await import("@/lib/miroshark/scrape-context");
+    const docs = await buildScrapeContext({ searchQuery, referenceUrls, maxDocs: 5, maxCharsPerDoc: 1200 });
+    return jsonOk({ docs });
   }
 
   const parsed = createSchema.safeParse(body);
