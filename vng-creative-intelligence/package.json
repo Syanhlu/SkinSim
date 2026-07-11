@@ -4,6 +4,7 @@
   "type": "module",
   "scripts": {
     "dev": "next dev",
+    "dev:miroshark": "node scripts/dev-with-miroshark.mjs",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
