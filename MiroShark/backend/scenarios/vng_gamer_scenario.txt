@@ -1,0 +1,68 @@
+VNG Games — 2026 Mobile Game Monetization Scenario (Vietnam)
+
+=== The market ===
+
+Vietnam's mobile gaming market in 2026 is huge, young, and fiercely price-sensitive.
+VNG publishes some of the country's biggest titles (PUBG Mobile VN, Võ Lâm Truyền Kỳ
+mobile, Play Together VNG), competing head-on with Garena's giants (Liên Quân Mobile,
+Free Fire), miHoYo's gacha juggernauts (Genshin Impact, Honkai: Star Rail), and a long
+tail of hyper-casual games. Players hop between titles constantly; loyalty follows
+friends' squads and esports scenes, not publishers.
+
+Monetization discourse is radioactive. Vietnamese gaming communities on Threads,
+Facebook groups, and TikTok are openly hostile to "hút máu" (blood-sucking) monetization:
+gacha odds accusations, pay-to-win complaints, screenshots of whales' spending as both
+flex and cautionary tale. At the same time, a well-priced battle pass or a genuinely
+pretty skin sells enormously — value perception is everything.
+
+2026 context: inflation has squeezed student budgets; 20k–50k VND is the casual
+comfort zone for a single purchase; 99k+ needs strong justification. Mobile top-up
+promotions via ZaloPay/MoMo wallets shape purchase timing. Esports events (VCS,
+PUBG Mobile tournaments) spike engagement and spending windows.
+
+=== The audience (who reacts, and how) ===
+
+- Student F2P grinders (16-22): play daily, pay rarely. They calculate event-grind
+  hours vs. purchase price and mock anything grind-gated behind a paywall. Loud in
+  comments, set the meme narrative fast.
+- Value hunters (18-28): pay monthly but only for "worth it" bundles — they compare
+  per-item value against past events and against Garena/miHoYo equivalents, and post
+  spreadsheet-style breakdowns.
+- Whales (small, decisive): buy everything limited-edition; care about exclusivity and
+  prestige, not price. Annoyed when "exclusive" items get re-released cheaper.
+- Gacha skeptics / consumer advocates: demand published drop rates, cite past odds
+  controversies, warn younger players. A single credible "rigged odds" accusation can
+  dominate a launch week.
+- Esports-driven players: buy what their favorite pro/streamer uses; a KOL showcase
+  converts them better than any discount.
+- Parents of younger players: a background worry-voice — spending caps, "game làm hư
+  trẻ con" discourse; occasionally viral when a kid's wallet story spreads.
+- Rival-game partisans: Liên Quân and Free Fire loyalists who dunk on VNG launches for
+  sport, comparing generosity of Garena's events.
+
+=== Discourse patterns ===
+
+Threads/TikTok: fast meme cycles, "đáng tiền không?" (worth the money?) verdict videos,
+side-by-side value comparisons, gacha-pull reaction clips, screenshots of full-odds
+tables when publishers hide them. Facebook groups: longer value debates, event-guide
+posts, complaint threads about pity systems and re-run pricing, parent-voice concerns.
+Praise exists but skews quieter than criticism; a strong deal earns "mua ngay" (buy now)
+chains and squad recruitment posts.
+
+=== The campaign under test ===
+
+A VNG-published mobile title is preparing a monetization push for a new cosmetic
+season, delivered as in-feed ads on Facebook and Threads, aiming to lift in-app
+purchases among 16-30 urban players within the first two weeks of the season.
+
+=== The open question the market bets on ===
+
+"Will this cosmetic-season promotion drive a visible lift in in-app purchases within
+2 weeks of launch?"
+
+Bulls argue: the pricing undercuts Garena's equivalent bundles, wallet-promo stacking
+(ZaloPay cashback) makes the effective price student-friendly, and esports KOL
+showcases convert fence-sitters. Bears argue: F2P grinders reframe it as pay-to-win
+creep, gacha skeptics attack the odds framing, rival-game partisans pile on, and
+squeezed student budgets mean hype without purchases. Both outcomes are plausible;
+the crowd should genuinely disagree.
