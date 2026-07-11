@@ -9,7 +9,8 @@
     "start": "next start",
     "lint": "next lint",
     "data:gen": "tsx data/generate.ts",
-    "eval": "tsx eval/backtest.ts"
+    "eval": "tsx eval/backtest.ts",
+    "smoke:miroshark": "tsx scripts/smoke-miroshark.ts"
   },
   "dependencies": {
     "@google/model-viewer": "^4.1.0",
