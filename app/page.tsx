@@ -763,6 +763,12 @@ const styles = `
     padding-top: 26px;
   }
 
+  /* Three columns need real room. Collapse early rather than squeeze. */
+  @media (max-width: 1280px) {
+    .workspace { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+    .workspace .readout-card { grid-column: 1 / -1; }
+  }
+
   .lower-grid {
     display: grid;
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
@@ -777,7 +783,7 @@ const styles = `
     border: 1px solid var(--line);
     border-radius: var(--radius);
     box-shadow: var(--shadow-card);
-    padding: 20px;
+    padding: 24px;
   }
 
   .card-heading {
@@ -906,9 +912,9 @@ const styles = `
   /* brief form */
   .brief-form {
     display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 12px 14px;
-    margin-bottom: 12px;
+    grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+    gap: 14px 16px;
+    margin-bottom: 14px;
   }
 
   .field { display: flex; flex-direction: column; gap: 5px; }
@@ -1022,11 +1028,14 @@ const styles = `
     margin-bottom: 14px;
   }
 
+  /* Stat pairs are type, not boxes: the card is the only container. */
   .metric {
-    background: var(--wash);
-    border: 1px solid var(--line);
-    border-radius: var(--radius-sm);
-    padding: 10px 13px;
+    padding: 2px 0;
+  }
+
+  .metric-grid .metric:nth-child(even) {
+    border-left: 1px solid var(--line);
+    padding-left: 16px;
   }
 
   .metric span {
@@ -1038,8 +1047,9 @@ const styles = `
   }
 
   .metric strong {
-    font-size: 17px;
-    line-height: 1.25;
+    font-size: 21px;
+    line-height: 1.2;
+    letter-spacing: -0.01em;
     overflow-wrap: anywhere;
     font-variant-numeric: tabular-nums;
   }
