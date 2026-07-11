@@ -98,26 +98,47 @@ export async function POST(req: Request) {
   }
 
   const client = clientFor(req);
+  const input = {
+    hypothesis: parsed.data.hypothesis,
+    variants: parsed.data.variants,
+    scenario: parsed.data.scenario,
+    parentSimulationId: parsed.data.parentSimulationId,
+    replicates: parsed.data.replicates,
+    parallel: parsed.data.parallel,
+    demoScenario: parsed.data.demoScenario === undefined ? undefined : normalizeScenario(parsed.data.demoScenario),
+    metric: parsed.data.metric,
+    metricType: parsed.data.metricType,
+    unit: parsed.data.unit,
+    alpha: parsed.data.alpha,
+    requiredSampleSizePerVariant: parsed.data.requiredSampleSizePerVariant,
+    plannedDays: parsed.data.plannedDays,
+  };
+
   try {
-    const job = await client.createExperiment({
-      hypothesis: parsed.data.hypothesis,
-      variants: parsed.data.variants,
-      scenario: parsed.data.scenario,
-      parentSimulationId: parsed.data.parentSimulationId,
-      replicates: parsed.data.replicates,
-      parallel: parsed.data.parallel,
-      demoScenario: parsed.data.demoScenario === undefined ? undefined : normalizeScenario(parsed.data.demoScenario),
-      metric: parsed.data.metric,
-      metricType: parsed.data.metricType,
-      unit: parsed.data.unit,
-      alpha: parsed.data.alpha,
-      requiredSampleSizePerVariant: parsed.data.requiredSampleSizePerVariant,
-      plannedDays: parsed.data.plannedDays,
-    });
+    const job = await client.createExperiment(input);
     return jsonOk(job, 202);
   } catch (error) {
+    // Grand-plan constraint #2: everything must demo with MiroShark down. A
+    // transport-level failure (engine configured but unreachable / bad gateway)
+    // falls back to the mock engine, labeled so the UI can say so and keep
+    // polling with ?sim=mock. Validation errors (4xx) still surface.
+    if (isEngineUnreachable(error)) {
+      try {
+        const job = await getSimClient({ sim: "mock" }).createExperiment(input);
+        return jsonOk({ ...job, engine: "mock", engineNote: "MiroShark unreachable — deterministic mock engine" }, 202);
+      } catch {
+        return simError(error, "create_failed");
+      }
+    }
     return simError(error, "create_failed");
   }
+}
+
+function isEngineUnreachable(error: unknown): boolean {
+  if (error instanceof SimClientError) {
+    return error.status === undefined || error.status >= 500;
+  }
+  return error instanceof TypeError || error instanceof Error;
 }
 
 export async function GET(req: Request) {

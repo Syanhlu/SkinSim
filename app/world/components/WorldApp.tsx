@@ -247,8 +247,13 @@ export default function WorldApp({
     return `${agentCount} census-grounded personas · replay`;
   }, [mode, liveStatus, experimentId, agentCount]);
 
+  const highlighted = useMemo(
+    () => new Set(setup?.tlA.highlightedAgents ?? []),
+    [setup],
+  );
+
   return (
-    <div className="world-root">
+    <div className={`world-root${verdict && verdictVisible ? " verdict-open" : ""}`}>
       <header className="world-header">
         <h1>Same 100 people. Two realities.</h1>
         <div className="world-subtitle">{headerSubtitle}</div>
@@ -266,6 +271,7 @@ export default function WorldApp({
             variantClass="variant-a"
             lens={lens}
             silhouette={silhouette}
+            highlighted={highlighted}
             onAgentClick={clickAgentA}
           />
           <WorldCanvas
@@ -275,6 +281,7 @@ export default function WorldApp({
             variantClass="variant-b"
             lens={lens}
             silhouette={silhouette}
+            highlighted={highlighted}
             onAgentClick={clickAgentB}
           />
         </div>

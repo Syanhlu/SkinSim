@@ -73,7 +73,12 @@ export function BubbleField({ store }: { store: WorldStore }) {
         <div
           key={bubble.key}
           className="speech-bubble"
-          style={{ left: `${bubble.x}%`, top: `${bubble.y - 9}%` }}
+          style={{
+            // Clamp into the half's safe zone so edge bubbles neither clip
+            // off-screen nor collapse into one-word-per-line columns.
+            left: `${Math.min(84, Math.max(11, bubble.x))}%`,
+            top: `${Math.max(9, bubble.y - 9)}%`,
+          }}
         >
           {bubble.text}
           <span className="bubble-platform">{bubble.platform === "threads" ? "@threads" : "fb"}</span>

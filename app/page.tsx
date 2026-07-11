@@ -39,6 +39,8 @@ interface RunState {
   progress?: ExperimentProgress;
   results?: ExperimentResults;
   error?: string;
+  /** Set when the proxy fell back to the mock engine (MiroShark unreachable). */
+  engineNote?: string;
 }
 
 function briefToForm(brief: HypothesisBrief): BriefForm {
@@ -180,15 +182,23 @@ export default function Home() {
           plannedDays: design.power.durationDays,
         }),
       });
-      const created = (await createRes.json()) as ExperimentJob & { error?: { message?: string } };
+      const created = (await createRes.json()) as ExperimentJob & {
+        error?: { message?: string };
+        engine?: string;
+        engineNote?: string;
+      };
       if (!createRes.ok) throw new Error(created.error?.message ?? `Create failed (HTTP ${createRes.status}).`);
       let job: ExperimentJob = created;
+      // The proxy falls back to the mock engine when MiroShark is unreachable —
+      // keep polling the same engine and tell the operator.
+      const simParam = created.engine === "mock" ? "&sim=mock" : "";
+      const engineNote = created.engineNote;
       if (runToken.current !== token) return;
-      setRun({ phase: job.status === "running" ? "running" : "preparing", experimentId: job.experimentId, progress: job.progress });
+      setRun({ phase: job.status === "running" ? "running" : "preparing", experimentId: job.experimentId, progress: job.progress, engineNote });
 
       for (let poll = 0; poll < 60 && job.status !== "complete" && job.status !== "failed"; poll += 1) {
         await sleep(650);
-        const statusRes = await fetch(`/api/experiment?id=${encodeURIComponent(job.experimentId)}`);
+        const statusRes = await fetch(`/api/experiment?id=${encodeURIComponent(job.experimentId)}${simParam}`);
         const statusBody = (await statusRes.json()) as ExperimentJob & { error?: { message?: string } };
         if (!statusRes.ok) throw new Error(statusBody.error?.message ?? `Status failed (HTTP ${statusRes.status}).`);
         job = statusBody;
@@ -197,6 +207,7 @@ export default function Home() {
           phase: job.status === "preparing" ? "preparing" : job.status === "complete" ? "running" : "running",
           experimentId: job.experimentId,
           progress: job.progress,
+          engineNote,
         });
       }
 
@@ -204,7 +215,7 @@ export default function Home() {
         throw new Error(job.error || `Experiment ended as ${job.status}.`);
       }
 
-      const resultsRes = await fetch(`/api/experiment?id=${encodeURIComponent(job.experimentId)}&results=1`);
+      const resultsRes = await fetch(`/api/experiment?id=${encodeURIComponent(job.experimentId)}&results=1${simParam}`);
       const resultsBody = (await resultsRes.json()) as { results?: ExperimentResults; error?: { message?: string } };
       if (!resultsRes.ok || !resultsBody.results) {
         throw new Error(resultsBody.error?.message ?? `Results failed (HTTP ${resultsRes.status}).`);
@@ -214,7 +225,7 @@ export default function Home() {
         ? resultsBody.results
         : { ...resultsBody.results, requiredSampleSizePerVariant: design.power.sampleSizePerVariant };
       if (runToken.current !== token) return;
-      setRun({ phase: "complete", experimentId: job.experimentId, progress: job.progress, results });
+      setRun({ phase: "complete", experimentId: job.experimentId, progress: job.progress, results, engineNote });
     } catch (error) {
       if (runToken.current !== token) return;
       setRun({ phase: "failed", error: error instanceof Error ? error.message : "Experiment failed." });
@@ -409,6 +420,7 @@ export default function Home() {
                     readout.recommendation.caveats.length > 0 ? readout.recommendation.caveats.join("; ") : "None"
                   }
                 />
+                <Row label="Engine" value={run.engineNote ?? "as configured"} />
               </div>
             </>
           ) : (
@@ -433,6 +445,9 @@ export default function Home() {
                 </p>
               )}
               {run.phase === "failed" && <p className="empty error-text">Experiment failed: {run.error}</p>}
+              {run.engineNote && run.phase !== "failed" && (
+                <p className="empty engine-note">⚠ {run.engineNote}</p>
+              )}
               {(run.phase === "launching" || run.phase === "preparing" || run.phase === "running") && (
                 <div className="progress-track" role="progressbar" aria-label="Experiment progress">
                   <div
@@ -844,6 +859,11 @@ const styles = `
   .run-status {
     display: grid;
     gap: 12px;
+  }
+
+  .engine-note {
+    color: #8a6a1f;
+    font-weight: 600;
   }
 
   .error-text {

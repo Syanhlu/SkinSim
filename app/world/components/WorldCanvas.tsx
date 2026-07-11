@@ -19,6 +19,7 @@ export default function WorldCanvas({
   variantClass,
   lens,
   silhouette,
+  highlighted,
   onAgentClick,
 }: {
   store: WorldStore;
@@ -28,6 +29,8 @@ export default function WorldCanvas({
   lens: LensMode;
   /** Render agents as gray silhouettes ("preparing audience…"). */
   silhouette?: boolean;
+  /** Agent ids with pre-recorded interviews (replay mode) — visually marked. */
+  highlighted?: Set<string>;
   onAgentClick?: (agent: WorldAgent) => void;
 }) {
   return (
@@ -44,6 +47,7 @@ export default function WorldCanvas({
           store={store}
           lens={lens}
           silhouette={silhouette}
+          isHighlighted={highlighted?.has(agent.id)}
           onClick={onAgentClick}
         />
       ))}

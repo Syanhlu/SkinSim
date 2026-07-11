@@ -16,12 +16,14 @@ interface AgentSpriteProps {
   store: WorldStore;
   lens: LensMode;
   silhouette?: boolean;
+  /** Agent has pre-recorded interview answers — marked so replay users click the right people. */
+  isHighlighted?: boolean;
   onClick?: (agent: WorldAgent) => void;
 }
 
 const FALLBACK_SNAPSHOT: AgentSnapshot = { stance: "unknown", x: 50, y: 70, talking: false };
 
-function AgentSpriteImpl({ agent, store, lens, silhouette, onClick }: AgentSpriteProps) {
+function AgentSpriteImpl({ agent, store, lens, silhouette, isHighlighted, onClick }: AgentSpriteProps) {
   const subscribe = useMemo(() => store.subscribeAgent(agent.id), [store, agent.id]);
   const snapshot =
     useSyncExternalStore(
@@ -68,6 +70,7 @@ function AgentSpriteImpl({ agent, store, lens, silhouette, onClick }: AgentSprit
         facingLeft ? "facing-left" : "",
         segment ? "lens-on" : "",
         silhouette ? "silhouette" : "",
+        isHighlighted ? "highlighted" : "",
       ]
         .filter(Boolean)
         .join(" ")}
@@ -92,6 +95,7 @@ function AgentSpriteImpl({ agent, store, lens, silhouette, onClick }: AgentSprit
           </g>
         </svg>
       </div>
+      {isHighlighted && !silhouette && <span className="interview-flag">hỏi tôi!</span>}
       <div className="agent-tooltip">
         <div className="tooltip-name">{agent.name}</div>
         {meta && <div className="tooltip-meta">{meta}</div>}
