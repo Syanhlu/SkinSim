@@ -1,4 +1,4 @@
-import { MockSimClient, getSimClient, type SimVerdict } from "@/lib/sim-client";
+import { MockSimClient, getSimClient, type SimOptions, type SimVerdict } from "@/lib/sim-client";
 import {
   generateSkinImage,
   imageTo3dModel,
@@ -61,6 +61,8 @@ export interface GenerationPipelineResult {
 
 export interface GenerationPipelineOptions {
   publicOrigin?: string;
+  /** Overrides merged into the default simulate_reception options (horizon/personas/market). */
+  simOptions?: SimOptions;
 }
 
 const MOCK_CONCEPTS: SkinConcept[] = [
@@ -142,7 +144,10 @@ export async function gen_skins(theme: string): Promise<SkinConcept[]> {
   );
 }
 
-export async function simulate_reception(concept: SkinConcept): Promise<ScoredSkinConcept> {
+export async function simulate_reception(
+  concept: SkinConcept,
+  simOptions: SimOptions = {},
+): Promise<ScoredSkinConcept> {
   const client = getSimClient();
   const document = [
     `Skin concept: ${concept.title}`,
@@ -168,7 +173,7 @@ export async function simulate_reception(concept: SkinConcept): Promise<ScoredSk
     reception = await client.simulate({
       document,
       urlDocs: urlDocs.length > 0 ? urlDocs : undefined,
-      options: { horizon: "7d", personas: 240, market: true },
+      options: { horizon: "7d", personas: 240, market: true, ...simOptions },
     });
   } catch (error) {
     const fallbackReason = error instanceof Error ? error.message : String(error);
@@ -235,7 +240,7 @@ export async function runGenerationPipeline(
   options: GenerationPipelineOptions = {},
 ): Promise<GenerationPipelineResult> {
   const concepts = await gen_skins(theme);
-  const scored = await Promise.all(concepts.map(simulate_reception));
+  const scored = await Promise.all(concepts.map((concept) => simulate_reception(concept, options.simOptions)));
   const best = pick_best(scored);
   const model = await to_3d(best, options);
   const nanoFallback = concepts.find((concept) => concept.imageFallbackReason)?.imageFallbackReason;
