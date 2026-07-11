@@ -259,22 +259,22 @@ export default function Home() {
     <main className="shell">
       <section className="intro">
         <div>
-          <p className="eyebrow">SkinSim · Synthetic A/B Testing</p>
-          <h1>Statistically sound decisions, not LLM math.</h1>
+          <p className="eyebrow">SkinSim</p>
+          <h1>Know which idea wins — before you spend real money.</h1>
           <a className="world-link" href="/world?mode=replay&demo=kfc">
-            ✦ Watch the crowd react in the Agent World →
+            Watch a simulated Vietnamese crowd react live →
           </a>
         </div>
         <p className="brief-note">
-          Type a hypothesis, confirm the extracted test brief, then launch a synthetic experiment — real MiroShark
-          engine when configured, deterministic mock otherwise — and get a ship, iterate, or kill call from real
-          statistics with traps for underpowered tests, peeking, and novelty.
+          Describe what you want to test. We build the test for you, show it to a simulated
+          audience of realistic Vietnamese consumers, and give you a clear answer:
+          <strong> ship it, improve it, or drop it</strong> — backed by real statistics.
         </p>
       </section>
 
       <section className="workspace">
         <div className="control-panel">
-          <label htmlFor="hypothesis">Hypothesis</label>
+          <label htmlFor="hypothesis">What do you want to test?</label>
           <textarea
             id="hypothesis"
             value={hypothesis}
@@ -282,7 +282,8 @@ export default function Home() {
             rows={5}
           />
 
-          <div className="scenario-grid" aria-label="Demo result scenario">
+          <label className="group-label">Try a sample outcome</label>
+          <div className="scenario-grid" aria-label="Sample outcome presets">
             {demoScenarios.map((item) => (
               <button
                 key={item.id}
@@ -297,23 +298,23 @@ export default function Home() {
           </div>
 
           <button className="agent-button" type="button" onClick={sendToAgent} disabled={status !== "ready"}>
-            Ask agent
+            Ask the AI assistant
           </button>
         </div>
 
         <section className="card brief-card">
           <div className="card-heading">
-            <p className="eyebrow">Test Brief · confirm before launch</p>
+            <p className="eyebrow">Your test plan</p>
             <span className={`source-badge ${form.source}`}>
-              {extracting ? "extracting…" : form.source === "agent" ? "extracted by agent" : "heuristic"}
-              {edited && !extracting ? " · edited" : ""}
+              {extracting ? "filling in…" : form.source === "agent" ? "filled in by AI" : "auto-filled"}
+              {edited && !extracting ? " · edited by you" : ""}
             </span>
           </div>
           <p className="rationale">{form.rationale}</p>
 
           <div className="brief-form">
             <div className="field">
-              <label htmlFor="brief-metric">Metric</label>
+              <label htmlFor="brief-metric">What we measure</label>
               <input
                 id="brief-metric"
                 type="text"
@@ -322,19 +323,18 @@ export default function Home() {
               />
             </div>
             <div className="field">
-              <label htmlFor="brief-type">Type</label>
+              <label htmlFor="brief-direction">We want it to</label>
               <select
-                id="brief-type"
-                value={form.metricType}
-                onChange={(event) => updateForm({ metricType: event.target.value as MetricType })}
+                id="brief-direction"
+                value={form.direction}
+                onChange={(event) => updateForm({ direction: event.target.value as Direction })}
               >
-                <option value="binary">binary</option>
-                <option value="continuous">continuous</option>
-                <option value="count">count</option>
+                <option value="increase">go up</option>
+                <option value="decrease">go down</option>
               </select>
             </div>
             <div className="field">
-              <label htmlFor="brief-baseline">Baseline</label>
+              <label htmlFor="brief-baseline">Where it is today</label>
               <input
                 id="brief-baseline"
                 type="number"
@@ -344,7 +344,7 @@ export default function Home() {
               />
             </div>
             <div className="field">
-              <label htmlFor="brief-mde">MDE</label>
+              <label htmlFor="brief-mde">Smallest change that matters</label>
               <input
                 id="brief-mde"
                 type="number"
@@ -353,49 +353,56 @@ export default function Home() {
                 onChange={(event) => updateForm({ mde: event.target.value })}
               />
             </div>
-            <div className="field">
-              <label htmlFor="brief-direction">Direction</label>
-              <select
-                id="brief-direction"
-                value={form.direction}
-                onChange={(event) => updateForm({ direction: event.target.value as Direction })}
-              >
-                <option value="increase">increase</option>
-                <option value="decrease">decrease</option>
-              </select>
-            </div>
-            <div className="field">
-              <label htmlFor="brief-unit">Unit</label>
-              <input
-                id="brief-unit"
-                type="text"
-                value={form.unit}
-                onChange={(event) => updateForm({ unit: event.target.value })}
-              />
-            </div>
           </div>
 
+          <details className="advanced">
+            <summary>Advanced settings</summary>
+            <div className="brief-form">
+              <div className="field">
+                <label htmlFor="brief-type">Metric type</label>
+                <select
+                  id="brief-type"
+                  value={form.metricType}
+                  onChange={(event) => updateForm({ metricType: event.target.value as MetricType })}
+                >
+                  <option value="binary">binary (yes/no)</option>
+                  <option value="continuous">continuous (amounts)</option>
+                  <option value="count">count (events)</option>
+                </select>
+              </div>
+              <div className="field">
+                <label htmlFor="brief-unit">Measured per</label>
+                <input
+                  id="brief-unit"
+                  type="text"
+                  value={form.unit}
+                  onChange={(event) => updateForm({ unit: event.target.value })}
+                />
+              </div>
+            </div>
+          </details>
+
           <div className="metric-grid">
-            <Metric label="n / variant" value={design ? design.power.sampleSizePerVariant.toLocaleString() : "—"} />
-            <Metric label="Duration" value={design ? `${design.power.durationDays} days` : "—"} />
+            <Metric label="People per version" value={design ? design.power.sampleSizePerVariant.toLocaleString() : "—"} />
+            <Metric label="Days to run" value={design ? `${design.power.durationDays} days` : "—"} />
           </div>
 
           <div className="row-list">
-            <Row label="Variants" value="Control vs treatment, 50/50 player-level randomization" />
-            <Row label="Stop rule" value={design ? design.stopConditions.join("; ") : "Fix baseline/MDE to compute the stop rule."} />
-            <Row label="Guardrails" value={design ? design.guardrails.join("; ") : "—"} />
+            <Row label="Versions" value="Two versions — each shown to half the audience, split fairly" />
+            <Row label="When we stop" value={design ? design.stopConditions.join("; ") : "Fill in the two numbers above to compute this."} />
+            <Row label="Safety checks" value={design ? design.guardrails.join("; ") : "—"} />
           </div>
 
           <button className="launch-button" type="button" onClick={launch} disabled={launchDisabled}>
             {run.phase === "launching" || run.phase === "preparing" || run.phase === "running"
-              ? "Experiment running…"
-              : "Launch experiment"}
+              ? "Test running…"
+              : "Run the test"}
           </button>
         </section>
 
         <section className="card readout-card">
           <div className="card-heading">
-            <p className="eyebrow">Readout Report · deterministic stats engine (source of truth)</p>
+            <p className="eyebrow">Result</p>
             {readout ? <DecisionBadge decision={readout.recommendation.decision} /> : <span className="phase-badge">{phaseLabel(run.phase)}</span>}
           </div>
 
@@ -403,48 +410,46 @@ export default function Home() {
             <>
               <p className="rationale">{readout.recommendation.rationale}</p>
               <div className="metric-grid">
-                <Metric label="Test picked" value={readout.significance.test.replaceAll("_", " ")} />
-                <Metric label="p-value" value={formatPValue(readout.significance.pValue)} />
-                <Metric label="Effect" value={formatSignedLevel(readout.significance.effect, run.results.metricType)} />
-                <Metric label="95% CI" value={formatCi(readout.significance.ci95, run.results.metricType)} />
+                <Metric label="Change we saw" value={formatSignedLevel(readout.significance.effect, run.results.metricType)} />
+                <Metric label="Chance it's just luck" value={formatPValue(readout.significance.pValue)} />
+                <Metric label="Likely true range" value={formatCi(readout.significance.ci95, run.results.metricType)} />
+                <Metric
+                  label="People tested"
+                  value={(run.results.variants[0].visitors + run.results.variants[1].visitors).toLocaleString()}
+                />
               </div>
               <div className="row-list">
+                <Row label="Safety checks" value={readout.guardrails.passed ? "All clear" : "Something needs attention"} />
                 <Row
-                  label="Sample"
-                  value={`${run.results.variants[0].visitors.toLocaleString()} control / ${run.results.variants[1].visitors.toLocaleString()} treatment`}
-                />
-                <Row label="Guardrail state" value={readout.guardrails.passed ? "Clean" : "Needs action"} />
-                <Row
-                  label="Caveats"
+                  label="Watch-outs"
                   value={
                     readout.recommendation.caveats.length > 0 ? readout.recommendation.caveats.join("; ") : "None"
                   }
                 />
-                <Row label="Engine" value={run.engineNote ?? "as configured"} />
+                <Row label="Method" value={readout.significance.test.replaceAll("_", " ")} />
+                <Row label="Data source" value={run.engineNote ?? "simulation engine"} />
               </div>
             </>
           ) : (
             <div className="run-status">
               {run.phase === "idle" && (
                 <p className="empty">
-                  Confirm the brief on the left, then launch. The experiment runs as an async job — create, poll,
-                  readout — against MiroShark when configured, or the deterministic mock engine otherwise.
+                  Check your test plan on the left, then press <strong>Run the test</strong>. You&apos;ll
+                  watch it go from preparing to done right here.
                 </p>
               )}
               {(run.phase === "launching" || run.phase === "preparing") && (
-                <p className="empty">Preparing audience… spawning census-grounded personas for both variants.</p>
+                <p className="empty">Creating your simulated audience…</p>
               )}
               {run.phase === "running" && (
                 <p className="empty">
-                  Running simulation…
+                  The crowd is reacting…
                   {run.progress
-                    ? ` ${run.progress.runsDone}/${run.progress.runsTotal} runs done${
-                        run.progress.runsActive ? `, ${run.progress.runsActive} active` : ""
-                      }.`
+                    ? ` ${run.progress.runsDone} of ${run.progress.runsTotal} rounds finished.`
                     : ""}
                 </p>
               )}
-              {run.phase === "failed" && <p className="empty error-text">Experiment failed: {run.error}</p>}
+              {run.phase === "failed" && <p className="empty error-text">The test hit a problem: {run.error}</p>}
               {run.engineNote && run.phase !== "failed" && (
                 <p className="empty engine-note">⚠ {run.engineNote}</p>
               )}
@@ -464,11 +469,13 @@ export default function Home() {
         </section>
       </section>
 
-      <section className="lower-grid">
+      <details className="under-hood">
+        <summary>Under the hood — how every number was computed (for the curious)</summary>
+        <section className="lower-grid">
         <section className="card">
           <div className="card-heading">
-            <p className="eyebrow">Tool Trace</p>
-            <strong>Visible orchestration</strong>
+            <p className="eyebrow">Calculation trace</p>
+            <strong>Every number, shown working</strong>
           </div>
           <div className="trace-list">
             {toolTrace.map((item) => (
@@ -482,15 +489,15 @@ export default function Home() {
 
         <section className="card">
           <div className="card-heading">
-            <p className="eyebrow">Agent Stream</p>
+            <p className="eyebrow">AI assistant</p>
             <strong>{status === "ready" ? "Ready" : status}</strong>
           </div>
           <div className="message-list">
             {messages.length === 0 ? (
               <p className="empty">
-                Use Ask agent to stream the same workflow through AI SDK tool calls. The agent only
-                orchestrates and narrates — every number it shows comes from the same deterministic
-                stats tools as the readout above, never from the model.
+                Press &quot;Ask the AI assistant&quot; to have the AI walk through the same test and
+                narrate it. It never does the math itself — every number comes from the same
+                statistics engine as the result card.
               </p>
             ) : (
               messages.map((message) => (
@@ -514,7 +521,8 @@ export default function Home() {
             )}
           </div>
         </section>
-      </section>
+        </section>
+      </details>
 
       <style>{styles}</style>
     </main>
@@ -526,12 +534,12 @@ function sleep(ms: number): Promise<void> {
 }
 
 function phaseLabel(phase: RunPhase): string {
-  if (phase === "idle") return "Awaiting launch";
-  if (phase === "launching") return "Creating job";
-  if (phase === "preparing") return "Preparing";
-  if (phase === "running") return "Running";
-  if (phase === "failed") return "Failed";
-  return "Complete";
+  if (phase === "idle") return "Ready when you are";
+  if (phase === "launching") return "Starting…";
+  if (phase === "preparing") return "Preparing audience";
+  if (phase === "running") return "Crowd reacting";
+  if (phase === "failed") return "Hit a problem";
+  return "Done";
 }
 
 function progressPct(run: RunState): number {
@@ -589,19 +597,22 @@ function formatCi([low, high]: [number, number], metricType: MetricType): string
 
 const styles = `
   :root {
-    --paper: #f7f4ea;
-    --paper-deep: #efeadb;
-    --grass: #e5e8d3;
-    --ink: #33302a;
-    --ink-soft: #6b6558;
-    --ink-faint: #a39c8b;
-    --accent-a: #c2452d;
-    --accent-b: #1f7a72;
-    --card-bg: #fffdf6;
-    --shadow: 0 2px 0 rgba(51, 48, 42, 0.18);
-    --shadow-card: 0 3px 0 rgba(51, 48, 42, 0.22);
-    --hand-font: "Segoe Print", "Comic Sans MS", "Patrick Hand", cursive;
-    --body-font: ui-rounded, "Segoe UI", system-ui, sans-serif;
+    --vng-orange: #f1592a;
+    --vng-orange-deep: #d64a1f;
+    --vng-orange-tint: #fef0ea;
+    --ink: #2b2a33;
+    --ink-soft: #6b6b76;
+    --ink-faint: #9d9da8;
+    --line: #e7e7ec;
+    --card-bg: #ffffff;
+    --page-bg: #ffffff;
+    --wash: #f7f7f9;
+    --good: #1d7a46;
+    --warn: #a06a12;
+    --bad: #c0392b;
+    --radius: 16px;
+    --radius-sm: 10px;
+    --shadow-card: 0 2px 10px rgba(43, 42, 51, 0.06);
     color: var(--ink);
   }
 
@@ -610,91 +621,102 @@ const styles = `
   body {
     margin: 0;
     color: var(--ink);
-    font-family: var(--body-font);
-    background:
-      radial-gradient(ellipse at 50% -20%, rgba(255, 255, 255, 0.7), transparent 60%),
-      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='120' viewBox='0 0 140 120'%3E%3Cg stroke='%23b9bf9a' stroke-width='1.2' fill='none' stroke-linecap='round' opacity='0.55'%3E%3Cpath d='M12 30 q2 -7 4 0'/%3E%3Cpath d='M17 31 q2 -5 4 0'/%3E%3Cpath d='M62 66 q2 -7 4 0'/%3E%3Cpath d='M67 67 q2 -5 4 0'/%3E%3Cpath d='M108 24 q2 -6 4 0'/%3E%3Cpath d='M30 96 q2 -7 4 0'/%3E%3Cpath d='M35 97 q2 -5 4 0'/%3E%3Cpath d='M96 104 q2 -6 4 0'/%3E%3Cpath d='M126 74 q2 -7 4 0'/%3E%3Cpath d='M84 40 q2 -5 4 0'/%3E%3C/g%3E%3C/svg%3E"),
-      var(--paper);
+    font-family: "Segoe UI", system-ui, -apple-system, "Helvetica Neue", sans-serif;
+    background: var(--page-bg);
   }
 
   .shell {
     max-width: 1240px;
     margin: 0 auto;
-    padding: 26px 22px 56px;
+    padding: 30px 24px 64px;
   }
 
   /* intro */
   .intro {
+    position: relative;
     display: grid;
     grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
-    gap: 24px;
+    gap: 28px;
     align-items: end;
-    padding: 18px 0 24px;
-    border-bottom: 2px dashed var(--ink-faint);
+    padding: 26px 0 30px;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .intro::before {
+    content: "";
+    position: absolute;
+    right: -60px;
+    top: -40px;
+    width: 380px;
+    height: 200px;
+    border-radius: 50%;
+    border: 2px solid var(--vng-orange-tint);
+    border-top-color: transparent;
+    border-left-color: transparent;
+    transform: rotate(-14deg);
+    pointer-events: none;
   }
 
   .eyebrow {
-    margin: 0 0 8px;
-    font-family: var(--hand-font);
-    color: var(--ink-soft);
-    font-size: 13px;
+    margin: 0 0 10px;
+    color: var(--vng-orange);
+    font-size: 14px;
     font-weight: 700;
-    letter-spacing: 0.04em;
+    letter-spacing: 0.01em;
   }
 
   .intro h1 {
     margin: 0;
-    font-family: var(--hand-font);
-    font-size: clamp(26px, 3.6vw, 44px);
+    font-size: clamp(26px, 3.4vw, 42px);
     font-weight: 700;
-    line-height: 1.12;
+    line-height: 1.15;
+    letter-spacing: -0.01em;
     color: var(--ink);
   }
 
   .world-link {
     display: inline-block;
-    margin-top: 12px;
-    font-family: var(--hand-font);
-    color: var(--accent-a);
+    margin-top: 14px;
+    color: var(--vng-orange);
     font-size: 15px;
-    font-weight: 700;
+    font-weight: 600;
     text-decoration: none;
-    border-bottom: 2px dashed var(--accent-a);
-    transition: transform 0.1s ease;
   }
 
-  .world-link:hover { transform: translateY(-1px) rotate(-0.5deg); }
+  .world-link:hover { color: var(--vng-orange-deep); text-decoration: underline; }
 
   .brief-note {
     margin: 0;
     color: var(--ink-soft);
-    font-size: 14.5px;
-    line-height: 1.55;
+    font-size: 15px;
+    line-height: 1.6;
   }
+
+  .brief-note strong { color: var(--ink); }
 
   /* layout */
   .workspace {
     display: grid;
     grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.05fr) minmax(0, 1.15fr);
-    gap: 18px;
-    padding-top: 22px;
+    gap: 20px;
+    padding-top: 26px;
   }
 
   .lower-grid {
     display: grid;
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-    gap: 18px;
-    margin-top: 18px;
+    gap: 20px;
+    margin-top: 14px;
   }
 
   /* cards */
   .card,
   .control-panel {
     background: var(--card-bg);
-    border: 2px solid var(--ink);
-    border-radius: 14px 18px 15px 13px / 15px 13px 18px 16px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
     box-shadow: var(--shadow-card);
-    padding: 16px 18px;
+    padding: 20px;
   }
 
   .card-heading {
@@ -702,110 +724,117 @@ const styles = `
     justify-content: space-between;
     align-items: center;
     gap: 10px;
-    margin-bottom: 10px;
+    margin-bottom: 12px;
   }
 
-  .card-heading .eyebrow { margin: 0; }
-  .card-heading strong { font-family: var(--hand-font); font-size: 15px; }
+  .card-heading .eyebrow { margin: 0; font-size: 15px; }
+  .card-heading strong { font-size: 13px; color: var(--ink-soft); font-weight: 600; }
 
   .rationale {
-    margin: 0 0 12px;
+    margin: 0 0 14px;
     color: var(--ink-soft);
     font-size: 13.5px;
-    line-height: 1.5;
+    line-height: 1.55;
   }
 
   /* control panel */
-  .control-panel { display: flex; flex-direction: column; gap: 10px; }
+  .control-panel { display: flex; flex-direction: column; gap: 12px; }
 
   .control-panel label {
-    font-family: var(--hand-font);
-    font-weight: 700;
+    font-weight: 600;
     font-size: 14px;
+    color: var(--ink);
+  }
+
+  .control-panel .group-label {
+    margin-top: 4px;
+    font-size: 13px;
+    color: var(--ink-soft);
+    font-weight: 600;
   }
 
   .control-panel textarea {
     width: 100%;
     resize: vertical;
-    font-family: var(--body-font);
+    font-family: inherit;
     font-size: 14px;
-    line-height: 1.5;
+    line-height: 1.55;
     color: var(--ink);
-    background: var(--paper);
-    border: 2px solid var(--ink-faint);
-    border-radius: 10px 13px 11px 10px / 11px 10px 13px 11px;
-    padding: 10px 12px;
+    background: var(--wash);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-sm);
+    padding: 11px 13px;
   }
 
   .control-panel textarea:focus-visible,
   .field input:focus-visible,
   .field select:focus-visible {
     outline: none;
-    border-color: var(--ink);
+    border-color: var(--vng-orange);
+    box-shadow: 0 0 0 3px var(--vng-orange-tint);
   }
 
   .scenario-grid {
     display: grid;
     grid-template-columns: 1fr;
-    gap: 7px;
+    gap: 8px;
   }
 
   .scenario {
     text-align: left;
-    background: var(--paper);
-    border: 2px solid var(--ink-faint);
-    border-radius: 10px 13px 11px 10px / 11px 10px 13px 11px;
-    padding: 7px 12px;
+    font-family: inherit;
+    background: var(--card-bg);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-sm);
+    padding: 8px 13px;
     cursor: pointer;
-    box-shadow: var(--shadow);
-    transition: transform 0.1s ease;
+    transition: border-color 0.15s ease, background 0.15s ease;
   }
 
-  .scenario:hover { transform: translateY(-1px) rotate(-0.3deg); }
+  .scenario:hover { border-color: var(--vng-orange); }
 
   .scenario.active {
-    border-color: var(--ink);
-    background: var(--grass);
+    border-color: var(--vng-orange);
+    background: var(--vng-orange-tint);
   }
 
   .scenario span {
     display: block;
-    font-family: var(--hand-font);
-    font-weight: 700;
+    font-weight: 600;
     font-size: 13.5px;
     color: var(--ink);
   }
 
+  .scenario.active span { color: var(--vng-orange-deep); }
+
   .scenario small {
     color: var(--ink-soft);
     font-size: 12px;
-    line-height: 1.35;
+    line-height: 1.4;
   }
 
   .agent-button,
   .launch-button {
-    font-family: var(--hand-font);
+    font-family: inherit;
     font-size: 15px;
-    font-weight: 700;
-    color: var(--paper);
+    font-weight: 600;
+    color: #fff;
     background: var(--ink);
-    border: 2px solid var(--ink);
-    border-radius: 11px 14px 12px 11px / 12px 11px 14px 12px;
-    padding: 9px 18px;
+    border: none;
+    border-radius: 999px;
+    padding: 11px 20px;
     cursor: pointer;
-    box-shadow: var(--shadow);
-    transition: transform 0.1s ease;
+    transition: background 0.15s ease, transform 0.1s ease;
   }
 
   .launch-button {
     width: 100%;
-    margin-top: 12px;
-    background: var(--accent-a);
-    border-color: var(--accent-a);
+    margin-top: 14px;
+    background: var(--vng-orange);
   }
 
-  .agent-button:hover:not(:disabled),
-  .launch-button:hover:not(:disabled) { transform: translateY(-1px) rotate(-0.5deg); }
+  .agent-button:hover:not(:disabled) { background: #17171c; }
+  .launch-button:hover:not(:disabled) { background: var(--vng-orange-deep); }
 
   .agent-button:active:not(:disabled),
   .launch-button:active:not(:disabled) { transform: translateY(1px); }
@@ -817,142 +846,148 @@ const styles = `
   .brief-form {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 10px 12px;
+    gap: 12px 14px;
     margin-bottom: 12px;
   }
 
-  .field { display: flex; flex-direction: column; gap: 4px; }
+  .field { display: flex; flex-direction: column; gap: 5px; }
 
   .field label {
-    font-family: var(--hand-font);
-    font-size: 12px;
-    font-weight: 700;
+    font-size: 12.5px;
+    font-weight: 600;
     color: var(--ink-soft);
   }
 
   .field input,
   .field select {
-    font-family: var(--body-font);
-    font-size: 13.5px;
+    font-family: inherit;
+    font-size: 14px;
     color: var(--ink);
-    background: var(--paper);
-    border: 2px solid var(--ink-faint);
-    border-radius: 9px 12px 10px 9px / 10px 9px 12px 10px;
-    padding: 7px 10px;
+    background: var(--wash);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-sm);
+    padding: 8px 11px;
   }
+
+  .advanced { margin-bottom: 12px; }
+
+  .advanced summary {
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--ink-faint);
+    cursor: pointer;
+    padding: 2px 0 8px;
+  }
+
+  .advanced summary:hover { color: var(--vng-orange); }
 
   .source-badge {
-    font-family: var(--hand-font);
-    font-size: 11.5px;
-    font-weight: 700;
+    font-size: 12px;
+    font-weight: 600;
     white-space: nowrap;
-    padding: 2px 10px;
-    border: 2px solid var(--ink);
+    padding: 3px 12px;
     border-radius: 999px;
-    background: var(--paper);
-    transform: rotate(-1.5deg);
+    background: var(--wash);
+    color: var(--ink-soft);
+    border: 1px solid var(--line);
   }
 
-  .source-badge.agent { background: var(--grass); }
-  .source-badge.heuristic { background: var(--paper-deep); }
+  .source-badge.agent {
+    background: var(--vng-orange-tint);
+    color: var(--vng-orange-deep);
+    border-color: var(--vng-orange);
+  }
 
   /* metrics & rows */
   .metric-grid {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 9px;
-    margin-bottom: 12px;
+    gap: 10px;
+    margin-bottom: 14px;
   }
 
   .metric {
-    background: var(--paper);
-    border: 1.5px solid var(--ink-faint);
-    border-radius: 10px 13px 11px 10px / 11px 10px 13px 11px;
-    padding: 8px 11px;
+    background: var(--wash);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-sm);
+    padding: 10px 13px;
   }
 
   .metric span {
     display: block;
-    font-family: var(--hand-font);
-    font-size: 11px;
-    font-weight: 700;
+    font-size: 11.5px;
+    font-weight: 600;
     color: var(--ink-soft);
-    margin-bottom: 2px;
+    margin-bottom: 3px;
   }
 
   .metric strong {
-    font-size: 16.5px;
+    font-size: 17px;
     line-height: 1.25;
     overflow-wrap: anywhere;
+    font-variant-numeric: tabular-nums;
   }
 
-  .row-list { display: flex; flex-direction: column; gap: 7px; }
+  .row-list { display: flex; flex-direction: column; gap: 8px; }
 
   .row {
     display: grid;
-    grid-template-columns: 92px minmax(0, 1fr);
-    gap: 10px;
+    grid-template-columns: 118px minmax(0, 1fr);
+    gap: 12px;
     align-items: baseline;
-    border-top: 1.5px dashed var(--paper-deep);
-    padding-top: 7px;
+    border-top: 1px solid var(--wash);
+    padding-top: 8px;
   }
 
   .row span {
-    font-family: var(--hand-font);
-    font-size: 11.5px;
-    font-weight: 700;
+    font-size: 12px;
+    font-weight: 600;
     color: var(--ink-soft);
   }
 
-  .row p { margin: 0; font-size: 13px; line-height: 1.45; }
+  .row p { margin: 0; font-size: 13px; line-height: 1.5; }
 
   /* decision & phase badges */
   .decision {
-    font-family: var(--hand-font);
-    font-size: 16px;
+    font-size: 14px;
     font-weight: 700;
-    letter-spacing: 0.05em;
-    padding: 2px 14px;
-    border: 2.5px solid;
-    border-radius: 10px 14px 11px 10px / 11px 10px 14px 11px;
+    letter-spacing: 0.04em;
+    padding: 4px 16px;
+    border-radius: 999px;
     display: inline-block;
-    transform: rotate(-2deg);
-    background: var(--card-bg);
+    color: #fff;
   }
 
-  .decision.ship { color: #276a45; border-color: #276a45; }
-  .decision.iterate { color: #9a6a1a; border-color: #9a6a1a; }
-  .decision.kill { color: var(--accent-a); border-color: var(--accent-a); }
+  .decision.ship { background: var(--good); }
+  .decision.iterate { background: var(--warn); }
+  .decision.kill { background: var(--bad); }
 
   .phase-badge {
-    font-family: var(--hand-font);
     font-size: 12px;
-    font-weight: 700;
+    font-weight: 600;
     color: var(--ink-soft);
-    border: 2px solid var(--ink-faint);
+    border: 1px solid var(--line);
     border-radius: 999px;
-    padding: 2px 12px;
-    background: var(--paper);
+    padding: 3px 12px;
+    background: var(--wash);
     white-space: nowrap;
   }
 
   /* run status */
-  .run-status { display: flex; flex-direction: column; gap: 10px; }
+  .run-status { display: flex; flex-direction: column; gap: 12px; }
 
   .empty {
     margin: 0;
     color: var(--ink-soft);
     font-size: 13.5px;
-    line-height: 1.55;
+    line-height: 1.6;
   }
 
-  .error-text { color: var(--accent-a); font-weight: 600; }
+  .empty strong { color: var(--ink); }
 
-  .engine-note {
-    font-family: var(--hand-font);
-    color: #9a6a1a;
-    font-weight: 700;
-  }
+  .error-text { color: var(--bad); font-weight: 600; }
+
+  .engine-note { color: var(--warn); font-weight: 600; }
 
   .experiment-id {
     font-family: ui-monospace, "Cascadia Code", monospace;
@@ -961,83 +996,100 @@ const styles = `
   }
 
   .progress-track {
-    height: 14px;
-    border: 2px solid var(--ink);
+    height: 10px;
     border-radius: 999px;
-    background: var(--paper);
+    background: var(--wash);
+    border: 1px solid var(--line);
     overflow: hidden;
-    box-shadow: var(--shadow);
   }
 
   .progress-fill {
     height: 100%;
-    background: repeating-linear-gradient(
-      -45deg,
-      var(--accent-b),
-      var(--accent-b) 8px,
-      #2c948a 8px,
-      #2c948a 16px
-    );
+    background: var(--vng-orange);
     border-radius: 999px;
     transition: width 0.5s ease;
   }
 
-  /* tool trace */
+  /* under the hood */
+  .under-hood { margin-top: 22px; }
+
+  .under-hood > summary {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--ink-faint);
+    cursor: pointer;
+    padding: 8px 0;
+  }
+
+  .under-hood > summary:hover { color: var(--vng-orange); }
+
   .trace-list { display: flex; flex-direction: column; gap: 8px; }
 
-  .tool-call {
-    border: 1.5px solid var(--ink-faint);
-    border-radius: 10px 13px 11px 10px / 11px 10px 13px 11px;
-    background: var(--paper);
-    padding: 6px 10px;
+  .trace-list details {
+    border: 1px solid var(--line);
+    border-radius: var(--radius-sm);
+    background: var(--wash);
+    padding: 7px 11px;
   }
 
-  .tool-call summary {
-    font-family: var(--hand-font);
-    font-weight: 700;
+  .trace-list summary {
+    font-weight: 600;
     font-size: 13px;
     cursor: pointer;
+    color: var(--ink);
   }
 
-  .tool-call pre {
+  .trace-list pre {
     margin: 8px 0 4px;
     padding: 10px;
     font-size: 11.5px;
     line-height: 1.5;
     overflow-x: auto;
     color: var(--ink);
-    background: var(--paper-deep);
+    background: #fff;
+    border: 1px solid var(--line);
     border-radius: 8px;
   }
 
   /* agent stream */
-  .message-list { display: flex; flex-direction: column; gap: 9px; }
+  .message-list { display: flex; flex-direction: column; gap: 10px; }
 
   .message {
-    border: 1.5px solid var(--ink-faint);
-    border-radius: 12px 15px 13px 11px / 13px 11px 15px 12px;
-    background: var(--paper);
-    padding: 9px 12px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-sm);
+    background: var(--wash);
+    padding: 10px 13px;
     font-size: 13.5px;
     line-height: 1.55;
   }
 
   .message.user {
-    background: var(--grass);
-    border-color: var(--ink-soft);
+    background: var(--vng-orange-tint);
+    border-color: var(--vng-orange);
   }
 
   .message.assistant { background: var(--card-bg); }
+
+  .message .tool-call {
+    margin: 8px 0 4px;
+    padding: 10px;
+    font-size: 11.5px;
+    overflow-x: auto;
+    background: #fff;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+  }
 
   /* responsive */
   @media (max-width: 1080px) {
     .workspace { grid-template-columns: 1fr; }
     .lower-grid { grid-template-columns: 1fr; }
     .intro { grid-template-columns: 1fr; }
+    .intro::before { display: none; }
   }
 
   @media (max-width: 720px) {
-    .shell { padding: 18px 14px 40px; }
+    .shell { padding: 20px 16px 44px; }
     .metric-grid { grid-template-columns: 1fr; }
     .brief-form { grid-template-columns: 1fr; }
   }
