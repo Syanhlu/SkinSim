@@ -1,0 +1,128 @@
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  unit:
+    name: Backend unit tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      # Install only the thin dependencies the unit suite needs.
+      # The full ``requirements.txt`` pulls in torch/transformers etc., which
+      # are not required for the offline unit tests and slow CI cold-start.
+      - name: Install unit-test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install \
+            "pytest>=8.0.0" \
+            pyyaml \
+            "openai>=1.0.0" \
+            "flask>=3.0.0" \
+            "flask-cors>=6.0.0" \
+            "flask-compress>=1.17" \
+            "python-dotenv>=1.0.0" \
+            "pydantic>=2.0.0" \
+            "requests>=2.31.0" \
+            "neo4j>=5.26.0" \
+            "pillow>=12.0.0"
+
+      - name: Run unit tests
+        run: pytest -m "not integration"
+
+  frontend:
+    name: Frontend build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Node 22
+        uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+  i18n-scan:
+    name: i18n FR scan (no copy-paste bugs)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      # The scanner parses every tr() call in the frontend and flags:
+      #   A. EN empty/short suffix but fr non-empty (clear copy-paste bug)
+      #   B. fr length wildly different from de (potential copy-paste)
+      #   C. Same long fr reused for >1 distinct EN (potential copy-paste)
+      # Only Type A fails CI (it's an unambiguous bug). Type B and C are
+      # reported as warnings because legitimate short translations and shared
+      # phrases trigger them.
+      - name: Run i18n scanner
+        run: python scripts/scan_i18n.py
+
+  camel-smoke:
+    name: Camel agent smoke test
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      # The unit job deliberately skips camel-ai/torch, so nothing else in CI
+      # exercises the camel <-> wonderwall integration. This job installs the
+      # REAL camel-ai (from requirements.txt, so a Dependabot bump re-triggers
+      # it) plus the wonderwall runtime deps that requirements.txt omits
+      # (torch/igraph/etc., kept in pyproject). A future camel-ai release that
+      # breaks the agent loop (see #181) then fails here instead of silently
+      # shipping a simulation that produces zero actions.
+      - name: Install camel + wonderwall runtime deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install torch --index-url https://download.pytorch.org/whl/cpu
+          pip install -r requirements.txt
+          pip install \
+            "numpy>=1.26.0" \
+            "pandas>=2.0.0" \
+            "scikit-learn>=1.3.0" \
+            "igraph>=0.11.0" \
+            "sentence-transformers>=2.2.0" \
+            "pytest>=8.0.0" \
+            "pytest-asyncio>=0.23.0"
+
+      - name: Run camel agent smoke test
+        run: pytest tests/test_smoke_camel_agent.py -v
+

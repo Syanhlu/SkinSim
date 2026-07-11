@@ -1,0 +1,39 @@
+{
+  "code": "vn",
+  "name": "Vietnam",
+  "flag_emoji": "🇻🇳",
+  "available": true,
+  "dataset": {
+    "repo_id": "nvidia/Nemotron-Personas-Vietnam",
+    "local_paths": [
+      "backend/data/nemotron/vietnam/data/train-*.parquet",
+      "backend/data/nemotron/data/train-*.parquet"
+    ],
+    "download_dir": "backend/data/nemotron/vietnam",
+    "allow_patterns": ["data/train-*", "README.md"],
+    "country_values": ["Việt Nam", "vietnam", "viet nam", "vn"]
+  },
+  "geography": {
+    "field": "region",
+    "label": "Province/City",
+    "values": [
+      "Thủ Đô Hà Nội", "Thành Phố Hải Phòng", "Thành Phố Đà Nẵng",
+      "Thành Phố Hồ Chí Minh", "Tỉnh Đồng Nai", "Thành Phố Cần Thơ"
+    ],
+    "groups": {
+      "north":   ["Thủ Đô Hà Nội", "Thành Phố Hải Phòng"],
+      "central": ["Thành Phố Đà Nẵng"],
+      "south":   ["Thành Phố Hồ Chí Minh", "Tỉnh Đồng Nai", "Thành Phố Cần Thơ"]
+    }
+  },
+  "filter_fields": [
+    {"field": "age",            "type": "range",       "label": "Age Range",   "default_min": 18, "default_max": 65},
+    {"field": "region",         "type": "multi-chips", "label": "Province/City"},
+    {"field": "occupation",     "type": "dropdown",    "label": "Occupation"},
+    {"field": "education_level","type": "dropdown",    "label": "Education"},
+    {"field": "zone",           "type": "single-chips","label": "Zone (Urban/Rural)"},
+    {"field": "sex",            "type": "single-chips","label": "Gender"}
+  ],
+  "max_agents": 500,
+  "default_agents": 250
+}
