@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 320" role="img" aria-label="Retro arcade gunner skin">
+  <rect width="320" height="320" fill="#1c1830"/>
+  <path d="M92 84h136v152H92Z" fill="#31365f"/>
+  <path d="M112 108h96v68h-96Z" fill="#78d4d6"/>
+  <path d="M118 212h84" stroke="#f6cf4e" stroke-width="14" stroke-linecap="round"/>
+  <path d="M124 136h18M178 136h18" stroke="#1c1830" stroke-width="12" stroke-linecap="round"/>
+  <path d="M86 250h148" stroke="#e75c70" stroke-width="12" stroke-linecap="round"/>
+</svg>

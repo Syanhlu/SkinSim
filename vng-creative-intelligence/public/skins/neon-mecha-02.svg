@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 320" role="img" aria-label="Chrome oni mecha skin">
+  <rect width="320" height="320" fill="#111820"/>
+  <circle cx="160" cy="138" r="90" fill="#263844"/>
+  <path d="M92 122 126 56l34 54 34-54 34 66-20 118H112Z" fill="#cfd7dd"/>
+  <path d="M118 136h84l-20 42h-44Z" fill="#0d1118"/>
+  <path d="M118 122h84M105 222h110" stroke="#ff4857" stroke-width="12" stroke-linecap="round"/>
+  <path d="M74 74 126 112M246 74l-52 38" stroke="#24c6a1" stroke-width="14" stroke-linecap="round"/>
+</svg>

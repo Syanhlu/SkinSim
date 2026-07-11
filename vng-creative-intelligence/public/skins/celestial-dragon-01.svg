@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 320" role="img" aria-label="Celestial dragon oracle skin">
+  <rect width="320" height="320" fill="#201b35"/>
+  <circle cx="160" cy="126" r="92" fill="#4a336b"/>
+  <path d="M76 216c58-90 118-126 168-104-38 0-61 17-69 51 32-13 58-3 79 30-60-20-104-6-134 43Z" fill="#64d4b2"/>
+  <path d="M125 86h70l28 151H97Z" fill="#e4cf91"/>
+  <path d="M139 118h42l14 82h-70Z" fill="#151428"/>
+  <path d="M104 252h112" stroke="#64d4b2" stroke-width="12" stroke-linecap="round"/>
+</svg>

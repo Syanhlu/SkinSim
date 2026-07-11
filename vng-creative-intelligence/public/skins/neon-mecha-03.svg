@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 320" role="img" aria-label="Neon mecha victory pose">
+  <rect width="320" height="320" fill="#15202b"/>
+  <path d="M62 250h196l-34-98-64-70-64 70Z" fill="#26313a"/>
+  <path d="M160 52 94 158h132Z" fill="#2ee59d" opacity=".25"/>
+  <path d="M132 104h56l28 70-24 74h-64l-24-74Z" fill="#d8dfe1"/>
+  <path d="M120 162h80M110 200h100" stroke="#ff675b" stroke-width="11" stroke-linecap="round"/>
+  <circle cx="160" cy="91" r="18" fill="#2ee59d"/>
+</svg>

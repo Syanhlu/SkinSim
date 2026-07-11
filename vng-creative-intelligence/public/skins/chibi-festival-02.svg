@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 320" role="img" aria-label="Bubble tea mascot skin">
+  <rect width="320" height="320" fill="#f8ead6"/>
+  <path d="M92 84h136l-18 176H110Z" fill="#d98b6b"/>
+  <path d="M108 112h104l-12 116h-80Z" fill="#f6cba7"/>
+  <circle cx="138" cy="204" r="10" fill="#3a2724"/>
+  <circle cx="165" cy="222" r="10" fill="#3a2724"/>
+  <circle cx="190" cy="198" r="10" fill="#3a2724"/>
+  <path d="M194 54 226 24" stroke="#65b4cc" stroke-width="12" stroke-linecap="round"/>
+  <path d="M124 146h72" stroke="#fff3e4" stroke-width="12" stroke-linecap="round"/>
+</svg>

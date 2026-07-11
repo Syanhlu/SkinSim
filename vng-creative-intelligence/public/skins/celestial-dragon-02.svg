@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 320" role="img" aria-label="Jade oracle dragon skin">
+  <rect width="320" height="320" fill="#182825"/>
+  <path d="M58 226c38-86 92-132 162-138-30 24-42 52-36 84 24-21 52-25 84-12-38 16-64 43-76 80Z" fill="#93d3a4"/>
+  <path d="M116 80h88l22 170H94Z" fill="#0c1718"/>
+  <path d="M130 112h60l14 102h-88Z" fill="#d8bd72"/>
+  <path d="M128 142h64M116 230h88" stroke="#a5f0c3" stroke-width="10" stroke-linecap="round"/>
+  <circle cx="160" cy="62" r="16" fill="#d8bd72"/>
+</svg>

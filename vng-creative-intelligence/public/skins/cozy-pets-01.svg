@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 320" role="img" aria-label="Cozy familiar picnic skin">
+  <rect width="320" height="320" fill="#eef1df"/>
+  <circle cx="160" cy="130" r="72" fill="#dcb68b"/>
+  <path d="M92 112 66 64M228 112l26-48" stroke="#a5795b" stroke-width="20" stroke-linecap="round"/>
+  <path d="M102 242c20-62 40-92 58-92s38 30 58 92Z" fill="#95bd88"/>
+  <circle cx="136" cy="128" r="9" fill="#33291e"/>
+  <circle cx="184" cy="128" r="9" fill="#33291e"/>
+  <path d="M140 162h40" stroke="#33291e" stroke-width="7" stroke-linecap="round"/>
+</svg>

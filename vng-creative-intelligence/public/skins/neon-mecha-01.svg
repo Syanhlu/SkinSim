@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 320" role="img" aria-label="Neon mecha ronin skin">
+  <rect width="320" height="320" fill="#172126"/>
+  <path d="M58 256 160 34l102 222Z" fill="#1fdc8f" opacity=".18"/>
+  <path d="M118 84h84l24 60-22 118h-88L94 144Z" fill="#2b3640"/>
+  <path d="M128 96h64l14 38-18 96h-56l-18-96Z" fill="#c9d4d8"/>
+  <path d="M160 76 104 138h112Z" fill="#ff5b5f"/>
+  <path d="M132 142h56M124 184h72M142 224h36" stroke="#1fdc8f" stroke-width="10" stroke-linecap="round"/>
+</svg>
