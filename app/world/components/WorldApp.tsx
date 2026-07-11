@@ -351,7 +351,9 @@ export default function WorldApp({
 // ── helpers ──────────────────────────────────────────────────────────────────
 
 async function fetchTimeline(path: string): Promise<WorldTimeline> {
-  const res = await fetch(path, { cache: "force-cache" });
+  // Default HTTP caching (NOT force-cache): a re-exported timeline must show
+  // up on reload — a stale demo dataset is worse than a cache miss.
+  const res = await fetch(path);
   if (!res.ok) throw new Error(`missing ${path} (HTTP ${res.status})`);
   const body = (await res.json()) as WorldTimeline;
   if (!Array.isArray(body.agents) || !Array.isArray(body.frames)) {

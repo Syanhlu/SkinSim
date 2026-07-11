@@ -134,10 +134,15 @@ export async function buildWorldTimeline(opts: BuildWorldTimelineOptions): Promi
   // stable across rounds, so individual arcs read believably.
   const stancePerRound = distributeStances(agents, drift, totalRounds);
 
-  // Posts per round: CREATE_POST actions carry round_num + agent identity.
-  // Fall back to raw /posts rows (no round info → spread evenly) when the
-  // action log carries no usable post text.
-  const postEvents = extractPostEvents(actions, postsData?.posts ?? [], agents, totalRounds);
+  // Posts per round: CREATE_POST and CREATE_COMMENT actions carry round_num +
+  // agent identity + text (comments dominate real runs ~70:1). Fall back to raw
+  // /posts rows (no round info → spread evenly) when the action log is unusable.
+  // Actions reference agents by the engine's entity-style name — map those too.
+  const entityIdByName = new Map<string, string>();
+  (profilesData?.profiles ?? []).forEach((profile, i) => {
+    if (profile.name && agents[i]) entityIdByName.set(profile.name, agents[i].id);
+  });
+  const postEvents = extractPostEvents(actions, postsData?.posts ?? [], agents, totalRounds, entityIdByName);
 
   const frames: WorldFrame[] = [];
   for (let round = 1; round <= totalRounds; round++) {
@@ -202,7 +207,9 @@ function profileToAgent(profile: MiroProfile, index: number): WorldAgent {
   const bio = typeof profile.bio === "string" ? profile.bio : "";
   return {
     id,
-    name: profile.name || profile.username || `Agent ${index + 1}`,
+    // The engine's `name` field carries the seeding KG entity ("KFC Vietnam",
+    // "Gen Z"…) — the human name opens the persona text ("Trần Gia Minh là…").
+    name: personName(persona) || profile.name || profile.username || `Agent ${index + 1}`,
     avatarSeed: hashSeed(`${id}:${profile.name ?? ""}`),
     demographics: {
       age: typeof profile.age === "number" ? profile.age : undefined,
@@ -212,6 +219,16 @@ function profileToAgent(profile: MiroProfile, index: number): WorldAgent {
     },
     personaSummary: firstSentence(persona || bio) || "A simulated consumer.",
   };
+}
+
+function personName(persona: string): string | undefined {
+  const head = persona.replace(/\s+/g, " ").trim().slice(0, 80);
+  if (!head) return undefined;
+  // "Trần Gia Minh là kiểu…" / "Đặng Thị Thảo, 43 tuổi, là…" / "Lan is the kind…"
+  const match = head.match(/^([^,.:;()]{2,40}?)(?:,| là | is | – | — )/);
+  const name = match?.[1]?.trim();
+  if (!name || name.split(" ").length > 6) return undefined;
+  return name;
 }
 
 function firstSentence(text: string): string {
@@ -306,19 +323,22 @@ function extractPostEvents(
   rawPosts: MiroPost[],
   agents: WorldAgent[],
   totalRounds: number,
+  entityIdByName?: Map<string, string>,
 ): Map<number, PostEvent[]> {
   const byRound = new Map<number, PostEvent[]>();
   const agentIds = new Set(agents.map((a) => a.id));
   const idByName = new Map(agents.map((a) => [a.name, a.id]));
+  for (const [name, id] of entityIdByName ?? []) idByName.set(name, id);
 
   const push = (round: number, event: PostEvent) => {
     if (!byRound.has(round)) byRound.set(round, []);
     byRound.get(round)!.push(event);
   };
 
+  const SPEAKING = new Set(["CREATE_POST", "CREATE_COMMENT", "QUOTE_POST"]);
   let found = 0;
   for (const action of actions) {
-    if (action.action_type !== "CREATE_POST" || action.success === false) continue;
+    if (!SPEAKING.has(action.action_type ?? "") || action.success === false) continue;
     const text = extractPostText(action);
     if (!text) continue;
     const agentId =

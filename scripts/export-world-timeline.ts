@@ -56,6 +56,32 @@ async function main(): Promise<void> {
     internalKey,
   });
 
+  // Completed sims can't be interviewed live (the engine only answers while a
+  // run sits in command-waiting mode), so bake canned Q&As from each agent's
+  // OWN posts — authentic answers in their own words, zero LLM cost. The five
+  // most vocal agents get highlighted ("hỏi tôi!") in the world.
+  const spokenBy = new Map<string, string[]>();
+  for (const frame of timeline.frames) {
+    for (const [agentId, state] of Object.entries(frame.states)) {
+      if (state.post?.text) {
+        if (!spokenBy.has(agentId)) spokenBy.set(agentId, []);
+        spokenBy.get(agentId)!.push(state.post.text);
+      }
+    }
+  }
+  const vocal = [...spokenBy.entries()].sort((a, b) => b[1].length - a[1].length).slice(0, 5);
+  timeline.highlightedAgents = vocal.map(([id]) => id);
+  timeline.interviews = Object.fromEntries(
+    vocal.map(([id, texts]) => [
+      id,
+      [
+        { question: "Bạn nghĩ gì về quảng cáo này?", answer: texts[0] },
+        { question: "Why didn't this convince you?", answer: texts[Math.floor(texts.length / 2)] },
+        { question: "Bạn có định mua thử không?", answer: texts[texts.length - 1] },
+      ],
+    ]),
+  );
+
   const here = dirname(fileURLToPath(import.meta.url));
   const outDir = args.out
     ? isAbsolute(args.out)
