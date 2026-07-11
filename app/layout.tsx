@@ -1,6 +1,6 @@
 export const metadata = {
-  title: "VNG A/B Test Agent",
-  description: "AABW scaffold for statistically sound LiveOps experiment decisions",
+  title: "SkinSim — Synthetic A/B Testing",
+  description: "Test your ads on a simulated Vietnamese audience before spending money on real ones",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
