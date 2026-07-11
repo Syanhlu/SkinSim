@@ -4,7 +4,7 @@ import { Poppins } from "next/font/google";
 // font, so we load Poppins — the standard geometric-sans stand-in for Gilroy —
 // and let the CSS stack prefer a locally installed SVN-Gilroy/Gilroy first.
 const brand = Poppins({
-  subsets: ["latin", "vietnamese"],
+  subsets: ["latin", "latin-ext"],
   weight: ["400", "500", "600", "700", "800"],
   variable: "--font-brand",
   display: "swap",
