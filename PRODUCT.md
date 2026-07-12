@@ -1,12 +1,12 @@
-# PRODUCT.md — SkinSim
+# PRODUCT.md — Agamotto
 
 register: product
 
 ## What it is
 
-SkinSim answers one question for marketers and game teams: which version of an idea
+Agamotto answers one question for marketers and game teams: which version of an idea
 wins, before real money is spent. The user describes a change (an ad, a promo, a
-price). SkinSim builds a rigorous A/B test, shows both versions to a simulated
+price). Agamotto builds a rigorous A/B test, shows both versions to a simulated
 audience of census-grounded Vietnamese consumers, and returns a plain verdict:
 ship it, improve it, or drop it. Real statistics compute every number; the AI only
 narrates and orchestrates.

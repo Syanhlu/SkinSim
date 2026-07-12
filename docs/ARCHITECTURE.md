@@ -1,4 +1,4 @@
-# SkinSim Architecture — one-pager
+# Agamotto Architecture — one-pager
 
 Type a hypothesis → agent designs the test → variants broadcast to the same simulated
 Vietnamese audience → deterministic statistics deliver SHIP / ITERATE / KILL.

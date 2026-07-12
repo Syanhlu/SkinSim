@@ -321,7 +321,7 @@ export default function Home() {
     <main className="shell">
       <section className="intro">
         <div>
-          <p className="eyebrow">SkinSim</p>
+          <p className="eyebrow">Agamotto</p>
           <h1>Know which idea wins before you spend real money.</h1>
           <a className="world-link" href="/world?mode=replay&demo=kfc">
             Watch a simulated Vietnamese crowd react live →
@@ -551,7 +551,7 @@ export default function Home() {
                 className="export-report-button"
                 onClick={() => {
                   const markdown = buildVerdictReport({
-                    title: `SkinSim experiment report — ${run.results!.metric}`,
+                    title: `Agamotto experiment report — ${run.results!.metric}`,
                     results: run.results!,
                     significance: readout.significance,
                     recommendation: readout.recommendation,
@@ -561,7 +561,7 @@ export default function Home() {
                       ["Data source", run.engineNote ?? "simulation engine"],
                     ],
                   });
-                  downloadReport(reportFilename("skinsim-report"), markdown);
+                  downloadReport(reportFilename("agamotto-report"), markdown);
                 }}
               >
                 ⬇ Export report

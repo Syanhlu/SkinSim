@@ -11,7 +11,7 @@ const brand = Poppins({
 });
 
 export const metadata = {
-  title: "SkinSim — Synthetic A/B Testing",
+  title: "Agamotto — Synthetic A/B Testing",
   description: "Test your ads on a simulated Vietnamese audience before spending money on real ones",
 };
 

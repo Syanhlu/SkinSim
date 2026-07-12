@@ -1,6 +1,6 @@
 "use client";
 
-// ─── SkinSim — liquid-glass stepped flow (visual shell) ──────────────────────
+// ─── Agamotto — liquid-glass stepped flow (visual shell) ──────────────────────
 // Design language borrowed from the Aucctus "Idea Playground": a dark burgundy→
 // black gradient, frosted glass cards, floating example pills, big white
 // headings, soft fade/slide transitions. This is a VISUAL SHELL: the follow-up
@@ -278,16 +278,16 @@ export default function Home() {
   // Remember the chosen base + texture across reloads while auditioning looks.
   // Key is versioned (v2) so an earlier saved choice doesn't pin the old default.
   useEffect(() => {
-    const savedTheme = window.localStorage.getItem("skinsim-theme-v3");
+    const savedTheme = window.localStorage.getItem("agamotto-theme-v3");
     if (savedTheme && THEMES.some((t) => t.id === savedTheme)) setThemeId(savedTheme);
-    const savedPattern = window.localStorage.getItem("skinsim-pattern-v3");
+    const savedPattern = window.localStorage.getItem("agamotto-pattern-v3");
     if (savedPattern && PATTERNS.some((p) => p.id === savedPattern)) setPattern(savedPattern);
   }, []);
   useEffect(() => {
-    window.localStorage.setItem("skinsim-theme-v3", themeId);
+    window.localStorage.setItem("agamotto-theme-v3", themeId);
   }, [themeId]);
   useEffect(() => {
-    window.localStorage.setItem("skinsim-pattern-v3", pattern);
+    window.localStorage.setItem("agamotto-pattern-v3", pattern);
   }, [pattern]);
 
   // Cursor tracking drives the interactive blueprint: --mx/--my position the
@@ -457,7 +457,7 @@ export default function Home() {
 
       <nav className="topbar">
         <span className="brandmark">
-          <span className="brand-dot" /> SkinSim
+          <span className="brand-dot" /> Agamotto
         </span>
         <div className="top-links">
           <button type="button" className="top-history" onClick={() => setHistoryOpen((v) => !v)}>

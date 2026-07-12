@@ -1,4 +1,4 @@
-# SkinSim — Synthetic A/B Testing for Vietnamese Audiences
+# Agamotto — Synthetic A/B Testing for Vietnamese Audiences
 
 AABW hackathon, VNG track. **Type a hypothesis → an agent designs a rigorous A/B test →
 two ad variants play to the *same* simulated census-grounded Vietnamese audience → a

@@ -21,14 +21,14 @@ export default function VerdictOverlay({
   const exportReport = () => {
     const labels = perVariant.map((v) => v.label).join(" vs ");
     const markdown = buildVerdictReport({
-      title: `SkinSim world verdict — ${labels}`,
+      title: `Agamotto world verdict — ${labels}`,
       results,
       significance,
       recommendation,
       perVariant,
       segmentWinners,
     });
-    downloadReport(reportFilename("skinsim-verdict"), markdown);
+    downloadReport(reportFilename("agamotto-verdict"), markdown);
   };
 
   return (

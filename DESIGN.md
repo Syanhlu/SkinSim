@@ -1,4 +1,4 @@
-# DESIGN.md — SkinSim
+# DESIGN.md — Agamotto
 
 Two deliberate design systems. Never mix them.
 

@@ -1,4 +1,4 @@
-# SkinSim — 3-Minute Stage Script
+# Agamotto — 3-Minute Stage Script
 
 Target runtime **2:45** spoken (leaves 15s buffer; hard cap 3:30 in rehearsal).
 Read the **bold lines** aloud; *(italics = what you do on screen while talking)*.
@@ -13,7 +13,7 @@ Read the **bold lines** aloud; *(italics = what you do on screen while talking)*
 
 *(Home page. Type the hypothesis into the prompt dock and hit Enter.)*
 
-> **"This is SkinSim. I type one sentence — 'A cheaper combo promo will lift KFC app
+> **"This is Agamotto. I type one sentence — 'A cheaper combo promo will lift KFC app
 > orders among students' — and the agent does the rest: it extracts a testable brief,
 > runs a real power analysis, and proposes three Vietnamese ad variants — price angle,
 > social angle, novelty angle. I didn't write any of this copy. I just pick two."**
@@ -74,7 +74,7 @@ or paraphrase: )*
 > **"Every statistical tool is validated against scipy and statsmodels to four decimal
 > places, and our decision eval closes 100% of known-outcome experiments with the
 > statistically sound call. From hypothesis to a rigorous, explainable decision — in
-> ninety seconds instead of two weeks. That's SkinSim."**
+> ninety seconds instead of two weeks. That's Agamotto."**
 
 ---
 

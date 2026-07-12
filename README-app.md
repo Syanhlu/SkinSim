@@ -1,4 +1,4 @@
-# SkinSim app — deep-dive
+# Agamotto app — deep-dive
 
 The Next.js 16 (AI SDK v5) product app at the repo root: an **A/B test design & readout
 agent** (VNG P11, Gaming/LiveOps track) fused with a synthetic Vietnamese audience
