@@ -412,19 +412,28 @@ export default function Home() {
     setRunPct(0);
   }, []);
 
+  // Fake latency between stages: hold the thinking overlay for a few seconds
+  // (with jitter so no two hops feel identical), then advance. When the real
+  // endpoints are wired in, the latency stops being pretend.
+  const runThinking = useCallback((message: string, ms: number, after: () => void) => {
+    setThinking(message);
+    window.setTimeout(() => {
+      setThinking(null);
+      after();
+    }, ms + Math.random() * 1400);
+  }, []);
+
   // Simulate the agent "reading" the idea before the clarify step. Wired later
   // to the real extract endpoint that also generates the questions.
   const submitIdea = useCallback(() => {
     if (!hypothesis.trim()) return;
-    setThinking("Reading your idea and figuring out what to ask");
-    window.setTimeout(() => {
-      setThinking(null);
+    runThinking("Reading your idea and figuring out what to ask", 2800, () => {
       setQuestions(pickQuestions());
       setAnswers({});
       setQIndex(0);
       goTo("clarify");
-    }, 1400);
-  }, [hypothesis, goTo]);
+    });
+  }, [hypothesis, runThinking, goTo]);
 
   const answerCurrent = useCallback(
     (value: string) => {
@@ -442,12 +451,8 @@ export default function Home() {
       setQIndex((i) => i + 1);
       return;
     }
-    setThinking("Designing a rigorous test from your answers");
-    window.setTimeout(() => {
-      setThinking(null);
-      goTo("plan");
-    }, 1400);
-  }, [qIndex, questions.length, goTo]);
+    runThinking("Designing a rigorous test from your answers", 3200, () => goTo("plan"));
+  }, [qIndex, questions.length, runThinking, goTo]);
 
   const prevQuestion = useCallback(() => {
     if (qIndex > 0) setQIndex((i) => i - 1);
@@ -482,26 +487,33 @@ export default function Home() {
         next[index] = { ...next[index], status: skin ? "ready" : "unmatched", skin };
         return next;
       });
-    }, 2200 + Math.random() * 900);
+    }, 4600 + Math.random() * 2200);
   }, [matcher]);
 
-  const runTest = useCallback(() => {
-    setRunPct(0);
-    goTo("running");
-  }, [goTo]);
+  const openVersions = useCallback(() => {
+    runThinking("Spinning up the skin generator for your two versions", 2400, () => goTo("versions"));
+  }, [runThinking, goTo]);
 
-  // Drive the fake progress bar, then reveal the verdict.
+  const runTest = useCallback(() => {
+    runThinking("Recruiting the simulated crowd and splitting it in half", 2600, () => {
+      setRunPct(0);
+      goTo("running");
+    });
+  }, [runThinking, goTo]);
+
+  // Drive the fake progress bar (a leisurely ~8s so the crowd feels like it is
+  // actually reacting), then reveal the verdict.
   useEffect(() => {
     if (step !== "running") return;
     let pct = 0;
     const timer = window.setInterval(() => {
-      pct = Math.min(100, pct + 4 + Math.random() * 6);
+      pct = Math.min(100, pct + 1.6 + Math.random() * 2.6);
       setRunPct(pct);
       if (pct >= 100) {
         window.clearInterval(timer);
-        window.setTimeout(() => goTo("verdict"), 500);
+        window.setTimeout(() => goTo("verdict"), 900);
       }
-    }, 140);
+    }, 220);
     return () => window.clearInterval(timer);
   }, [step, goTo]);
 
@@ -562,8 +574,6 @@ export default function Home() {
           <button type="button" className="top-history" onClick={() => setHistoryOpen((v) => !v)}>
             History
           </button>
-          <a href="/world?mode=replay&demo=kfc">Watch the crowd →</a>
-          <a href="/classic">Classic view</a>
         </div>
       </nav>
 
@@ -597,7 +607,7 @@ export default function Home() {
             hypothesis={hypothesis}
             questions={questions}
             answers={answers}
-            onNext={() => goTo("versions")}
+            onNext={openVersions}
             onBack={() => goTo("clarify")}
           />
         )}
