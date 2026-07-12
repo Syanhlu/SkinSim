@@ -41,17 +41,22 @@ interface ClarifyQuestion {
   hint: string;
   quickPicks: string[];
   placeholder: string;
+  /** Short label for this answer's cell on the plan step. */
+  planLabel: string;
 }
 
 // Stand-in for the AI-generated follow-ups. In production these arrive from the
-// agent after it reads the hypothesis; the shape below is what it returns.
-const MOCK_QUESTIONS: ClarifyQuestion[] = [
+// agent after it reads the hypothesis; until then each run draws a random
+// handful from this bank of game-testing questions so the clarify step doesn't
+// repeat the same three every time.
+const QUESTION_BANK: ClarifyQuestion[] = [
   {
     id: "baseline",
     prompt: "Where does this metric sit today?",
     hint: "We need your real starting number so the statistics mean something.",
     quickPicks: ["~2%", "~5%", "~10%", "Not sure yet"],
     placeholder: "e.g. 4.3% of new players convert in week one",
+    planLabel: "Starting point",
   },
   {
     id: "segment",
@@ -59,6 +64,7 @@ const MOCK_QUESTIONS: ClarifyQuestion[] = [
     hint: "A narrower audience gives a sharper, faster answer.",
     quickPicks: ["New players (first 7 days)", "Paying users", "All active users"],
     placeholder: "e.g. new players in Vietnam on mobile",
+    planLabel: "Audience",
   },
   {
     id: "mde",
@@ -66,8 +72,93 @@ const MOCK_QUESTIONS: ClarifyQuestion[] = [
     hint: "Below this, the change is not worth the risk of shipping it.",
     quickPicks: ["+0.5pp", "+1pp", "+2pp"],
     placeholder: "e.g. anything above +1 percentage point",
+    planLabel: "Lift that matters",
+  },
+  {
+    id: "platform",
+    prompt: "Where do your players actually play?",
+    hint: "Reactions to a skin differ a lot between a phone screen and a monitor.",
+    quickPicks: ["Mobile", "PC", "Console", "Cross-platform"],
+    placeholder: "e.g. 80% mobile, mostly mid-range Android",
+    planLabel: "Platform",
+  },
+  {
+    id: "monetization",
+    prompt: "How do players spend in your game today?",
+    hint: "A cosmetic test reads very differently in a gacha economy than a battle-pass one.",
+    quickPicks: ["Battle pass", "Direct skin sales", "Gacha / loot boxes", "Mostly ads"],
+    placeholder: "e.g. direct store purchases with seasonal bundles",
+    planLabel: "How players pay",
+  },
+  {
+    id: "region",
+    prompt: "Which market matters most for this test?",
+    hint: "Taste in themes and price sensitivity swing hard between regions.",
+    quickPicks: ["Vietnam", "Southeast Asia", "Global"],
+    placeholder: "e.g. Vietnam first, then the rest of SEA",
+    planLabel: "Market",
+  },
+  {
+    id: "genre",
+    prompt: "What kind of game is this?",
+    hint: "Genre sets the bar — shooter players judge a skin by kill-feel, not just looks.",
+    quickPicks: ["Shooter", "MOBA", "RPG", "Casual"],
+    placeholder: "e.g. 5v5 tactical shooter",
+    planLabel: "Genre",
+  },
+  {
+    id: "session",
+    prompt: "How long is a typical play session?",
+    hint: "Short sessions mean fewer chances for the store to even be seen.",
+    quickPicks: ["Under 10 min", "10–30 min", "30–60 min", "1 hour+"],
+    placeholder: "e.g. two 20-minute ranked matches a day",
+    planLabel: "Session length",
+  },
+  {
+    id: "price",
+    prompt: "What price point do you have in mind?",
+    hint: "Whether a skin feels premium or overpriced depends on where it sits in your store.",
+    quickPicks: ["Under 50k VND", "50–150k VND", "150–400k VND", "Premium tier"],
+    placeholder: "e.g. same tier as our last event bundle",
+    planLabel: "Price point",
+  },
+  {
+    id: "cadence",
+    prompt: "How often do you ship new cosmetics?",
+    hint: "Players numb to weekly drops react differently than players starved for content.",
+    quickPicks: ["Weekly", "Monthly", "Each season", "Rarely"],
+    placeholder: "e.g. one big themed set per season",
+    planLabel: "Cosmetic cadence",
+  },
+  {
+    id: "risk",
+    prompt: "What is the worst thing this change could break?",
+    hint: "We watch the metric you are most afraid of as a safety check during the run.",
+    quickPicks: ["Player backlash", "Cannibalizing other skins", "Refunds", "Nothing big"],
+    placeholder: "e.g. fans of the original skin review-bombing",
+    planLabel: "Biggest risk",
+  },
+  {
+    id: "timing",
+    prompt: "When would this go live?",
+    hint: "A summer skin lands differently in June than in November.",
+    quickPicks: ["This week", "Next patch", "Season start", "A holiday event"],
+    placeholder: "e.g. alongside the mid-year summer event",
+    planLabel: "Launch window",
   },
 ];
+
+const QUESTIONS_PER_RUN = 3;
+
+/** Fisher–Yates shuffle, then take the first few — a fresh mix per run. */
+function pickQuestions(): ClarifyQuestion[] {
+  const pool = [...QUESTION_BANK];
+  for (let i = pool.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [pool[i], pool[j]] = [pool[j], pool[i]];
+  }
+  return pool.slice(0, QUESTIONS_PER_RUN);
+}
 
 interface MockVerdict {
   decision: "ship" | "iterate" | "kill";
@@ -261,6 +352,9 @@ export default function Home() {
   const [characterImage, setCharacterImage] = useState<string | null>(null);
   const [versions, setVersions] = useState<[VersionSpec, VersionSpec]>([emptyVersion(), emptyVersion()]);
   const [thinking, setThinking] = useState<string | null>(null);
+  // The clarify questions drawn for this run. Deterministic default so SSR and
+  // the first client render agree; a fresh shuffle happens on every submit.
+  const [questions, setQuestions] = useState<ClarifyQuestion[]>(() => QUESTION_BANK.slice(0, QUESTIONS_PER_RUN));
   const [qIndex, setQIndex] = useState(0);
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [runPct, setRunPct] = useState(0);
@@ -325,6 +419,8 @@ export default function Home() {
     setThinking("Reading your idea and figuring out what to ask");
     window.setTimeout(() => {
       setThinking(null);
+      setQuestions(pickQuestions());
+      setAnswers({});
       setQIndex(0);
       goTo("clarify");
     }, 1400);
@@ -332,17 +428,17 @@ export default function Home() {
 
   const answerCurrent = useCallback(
     (value: string) => {
-      const q = MOCK_QUESTIONS[qIndex];
+      const q = questions[qIndex];
       setAnswers((prev) => ({ ...prev, [q.id]: value }));
       // Changing an answer invalidates the plan, run, and verdict.
       setMaxReached((m) => Math.min(m, 1));
       setRunPct(0);
     },
-    [qIndex],
+    [questions, qIndex],
   );
 
   const nextQuestion = useCallback(() => {
-    if (qIndex < MOCK_QUESTIONS.length - 1) {
+    if (qIndex < questions.length - 1) {
       setQIndex((i) => i + 1);
       return;
     }
@@ -351,7 +447,7 @@ export default function Home() {
       setThinking(null);
       goTo("plan");
     }, 1400);
-  }, [qIndex, goTo]);
+  }, [qIndex, questions.length, goTo]);
 
   const prevQuestion = useCallback(() => {
     if (qIndex > 0) setQIndex((i) => i - 1);
@@ -415,6 +511,9 @@ export default function Home() {
   const restoreRun = useCallback((run: HistoryRun) => {
     setHypothesis(run.hypothesis);
     setCharacterImage(run.image);
+    // Restore the exact questions this run answered so the clarify and plan
+    // steps replay it faithfully.
+    setQuestions(QUESTION_BANK.filter((q) => q.id in run.answers));
     setAnswers(run.answers);
     setQIndex(0);
     setVersions([
@@ -483,10 +582,10 @@ export default function Home() {
 
         {step === "clarify" && (
           <ClarifyStep
-            question={MOCK_QUESTIONS[qIndex]}
+            question={questions[qIndex]}
             index={qIndex}
-            total={MOCK_QUESTIONS.length}
-            value={answers[MOCK_QUESTIONS[qIndex].id] ?? ""}
+            total={questions.length}
+            value={answers[questions[qIndex].id] ?? ""}
             onAnswer={answerCurrent}
             onNext={nextQuestion}
             onPrev={prevQuestion}
@@ -494,7 +593,13 @@ export default function Home() {
         )}
 
         {step === "plan" && (
-          <PlanStep hypothesis={hypothesis} answers={answers} onNext={() => goTo("versions")} onBack={() => goTo("clarify")} />
+          <PlanStep
+            hypothesis={hypothesis}
+            questions={questions}
+            answers={answers}
+            onNext={() => goTo("versions")}
+            onBack={() => goTo("clarify")}
+          />
         )}
 
         {step === "versions" && (
@@ -726,11 +831,13 @@ function ClarifyStep({
 // ── Step 3: Plan ─────────────────────────────────────────────────────────────
 function PlanStep({
   hypothesis,
+  questions,
   answers,
   onNext,
   onBack,
 }: {
   hypothesis: string;
+  questions: ClarifyQuestion[];
   answers: Record<string, string>;
   onNext: () => void;
   onBack: () => void;
@@ -742,9 +849,9 @@ function PlanStep({
 
         <div className="plan-grid">
           <PlanCell label="What we measure" value="Purchase conversion" />
-          <PlanCell label="Audience" value={answers.segment || "New players"} />
-          <PlanCell label="Starting point" value={answers.baseline || "~5%"} />
-          <PlanCell label="Lift that matters" value={answers.mde || "+1pp"} />
+          {questions.map((q) => (
+            <PlanCell key={q.id} label={q.planLabel} value={answers[q.id] || q.quickPicks[0]} />
+          ))}
           <PlanCell label="People per version" value="6,200" />
           <PlanCell label="Days to run" value="14 days" />
         </div>
