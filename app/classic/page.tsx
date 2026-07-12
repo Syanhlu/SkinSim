@@ -18,6 +18,7 @@ import type { BriefSource, HypothesisBrief } from "@/lib/extract";
 import type { SimUrlDoc } from "@/lib/miroshark/client";
 import type { ExperimentJob, ExperimentProgress } from "@/lib/sim-client";
 import { significanceTest, type ExperimentResults, type MetricType } from "@/lib/stats";
+import { buildVerdictReport, downloadReport, reportFilename } from "@/lib/report-export";
 
 const defaultHypothesis = "A red Buy button will lift purchase conversion for new players.";
 
@@ -545,6 +546,26 @@ export default function Home() {
                 <Row label="Method" value={readout.significance.test.replaceAll("_", " ")} />
                 <Row label="Data source" value={run.engineNote ?? "simulation engine"} />
               </div>
+              <button
+                type="button"
+                className="export-report-button"
+                onClick={() => {
+                  const markdown = buildVerdictReport({
+                    title: `SkinSim experiment report — ${run.results!.metric}`,
+                    results: run.results!,
+                    significance: readout.significance,
+                    recommendation: readout.recommendation,
+                    guardrails: readout.guardrails,
+                    context: [
+                      ["Hypothesis", hypothesis.trim() || "—"],
+                      ["Data source", run.engineNote ?? "simulation engine"],
+                    ],
+                  });
+                  downloadReport(reportFilename("skinsim-report"), markdown);
+                }}
+              >
+                ⬇ Export report
+              </button>
             </>
           ) : (
             <div className="run-status">
@@ -965,6 +986,22 @@ const styles = `
 
   .agent-button:disabled,
   .launch-button:disabled { opacity: 0.45; cursor: default; }
+
+  .export-report-button {
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--ink);
+    background: transparent;
+    border: 1.5px solid var(--ink);
+    border-radius: 999px;
+    padding: 8px 16px;
+    margin-top: 12px;
+    cursor: pointer;
+    transition: background 0.15s ease, color 0.15s ease, transform 0.1s ease;
+  }
+  .export-report-button:hover { background: var(--ink); color: #fff; }
+  .export-report-button:active { transform: translateY(1px); }
 
   /* brief form */
   .brief-form {

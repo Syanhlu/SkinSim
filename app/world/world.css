@@ -648,6 +648,21 @@
   color: var(--ink-soft);
   cursor: pointer;
 }
+.verdict-card .verdict-export {
+  margin-top: 12px;
+  font-family: var(--hand-font);
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ink);
+  background: var(--paper);
+  border: 2px solid var(--ink);
+  border-radius: 11px 14px 12px 11px / 12px 11px 14px 12px;
+  padding: 5px 14px;
+  cursor: pointer;
+  box-shadow: 0 3px 0 rgba(51, 48, 42, 0.25);
+}
+.verdict-card .verdict-export:hover { transform: translateY(-1px); }
+.verdict-card .verdict-export:active { transform: translateY(1px); box-shadow: none; }
 .verdict-reopen {
   position: absolute;
   bottom: 64px;
