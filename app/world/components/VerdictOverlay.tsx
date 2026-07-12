@@ -5,7 +5,7 @@
 // lib/world/verdict.ts — the UI only renders them.
 
 import type { WorldVerdict } from "@/lib/world/verdict";
-import { buildVerdictReport, downloadReport, reportFilename } from "@/lib/report-export";
+import { exportReportPdf } from "@/lib/report-export";
 
 export default function VerdictOverlay({
   verdict,
@@ -20,15 +20,14 @@ export default function VerdictOverlay({
 
   const exportReport = () => {
     const labels = perVariant.map((v) => v.label).join(" vs ");
-    const markdown = buildVerdictReport({
-      title: `Agamotto world verdict — ${labels}`,
+    exportReportPdf({
+      title: `Agamotto Experiment Report — Variant ${labels}`,
       results,
       significance,
       recommendation,
       perVariant,
       segmentWinners,
     });
-    downloadReport(reportFilename("agamotto-verdict"), markdown);
   };
 
   return (
@@ -66,7 +65,7 @@ export default function VerdictOverlay({
           </div>
         )}
         <button type="button" className="verdict-export" onClick={exportReport}>
-          ⬇ Export report
+          ⬇ Export report (PDF)
         </button>
       </div>
     </div>

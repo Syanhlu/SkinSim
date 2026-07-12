@@ -18,7 +18,7 @@ import type { BriefSource, HypothesisBrief } from "@/lib/extract";
 import type { SimUrlDoc } from "@/lib/miroshark/client";
 import type { ExperimentJob, ExperimentProgress } from "@/lib/sim-client";
 import { significanceTest, type ExperimentResults, type MetricType } from "@/lib/stats";
-import { buildVerdictReport, downloadReport, reportFilename } from "@/lib/report-export";
+import { exportReportPdf } from "@/lib/report-export";
 
 const defaultHypothesis = "A red Buy button will lift purchase conversion for new players.";
 
@@ -550,21 +550,20 @@ export default function Home() {
                 type="button"
                 className="export-report-button"
                 onClick={() => {
-                  const markdown = buildVerdictReport({
-                    title: `Agamotto experiment report — ${run.results!.metric}`,
+                  exportReportPdf({
+                    title: `Agamotto Experiment Report — ${run.results!.metric}`,
                     results: run.results!,
                     significance: readout.significance,
                     recommendation: readout.recommendation,
                     guardrails: readout.guardrails,
                     context: [
-                      ["Hypothesis", hypothesis.trim() || "—"],
+                      ["Hypothesis tested", hypothesis.trim() || "—"],
                       ["Data source", run.engineNote ?? "simulation engine"],
                     ],
                   });
-                  downloadReport(reportFilename("agamotto-report"), markdown);
                 }}
               >
-                ⬇ Export report
+                ⬇ Export report (PDF)
               </button>
             </>
           ) : (
