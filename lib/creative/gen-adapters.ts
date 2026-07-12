@@ -49,39 +49,89 @@ export async function generateSkinImage(prompt: string): Promise<string | null> 
   }
 }
 
+const MESHY_IMAGE_TO_3D_URL = "https://api.meshy.ai/openapi/v1/image-to-3d";
+
+export interface MeshyTask {
+  id: string;
+  status: "PENDING" | "IN_PROGRESS" | "SUCCEEDED" | "FAILED" | "CANCELED";
+  /** 0–100 */
+  progress: number;
+  glbUrl: string | null;
+  thumbnailUrl: string | null;
+  error: string | null;
+}
+
+function meshyHeaders(): Record<string, string> {
+  const key = process.env.MESHY_KEY;
+  if (!key) throw new Error("MESHY_KEY is not set");
+  return { authorization: `Bearer ${key}`, "content-type": "application/json" };
+}
+
+/**
+ * Submit an image (https URL or data URI) to Meshy image-to-3D. Returns the task
+ * id; generation runs async on Meshy's side (typically 1–5 minutes), so callers
+ * poll with getMeshyImageTo3dTask rather than blocking a request on it.
+ */
+export async function createMeshyImageTo3dTask(imageUrl: string): Promise<string> {
+  const res = await fetch(MESHY_IMAGE_TO_3D_URL, {
+    method: "POST",
+    headers: meshyHeaders(),
+    body: JSON.stringify({ image_url: imageUrl, enable_pbr: true, should_texture: true }),
+  });
+  if (!res.ok) {
+    throw new Error(`Meshy create ${res.status}: ${await res.text().catch(() => res.statusText)}`);
+  }
+  const { result } = (await res.json()) as { result?: string };
+  if (!result) throw new Error("Meshy create returned no task id");
+  return result;
+}
+
+/** One status poll for an image-to-3D task. */
+export async function getMeshyImageTo3dTask(taskId: string): Promise<MeshyTask> {
+  const res = await fetch(`${MESHY_IMAGE_TO_3D_URL}/${encodeURIComponent(taskId)}`, {
+    headers: meshyHeaders(),
+  });
+  if (!res.ok) {
+    throw new Error(`Meshy status ${res.status}: ${await res.text().catch(() => res.statusText)}`);
+  }
+  const task = (await res.json()) as {
+    id?: string;
+    status?: MeshyTask["status"];
+    progress?: number;
+    model_urls?: { glb?: string };
+    thumbnail_url?: string;
+    task_error?: { message?: string };
+  };
+  return {
+    id: task.id ?? taskId,
+    status: task.status ?? "PENDING",
+    progress: task.progress ?? 0,
+    glbUrl: task.model_urls?.glb ?? null,
+    thumbnailUrl: task.thumbnail_url ?? null,
+    error: task.task_error?.message ?? null,
+  };
+}
+
 /**
  * Meshy image-to-3D. Submits the concept art, polls the task to completion, and
  * returns the GLB URL — or null if the key is unset / the job fails or times out.
  */
 export async function imageTo3dModel(imageUrl: string): Promise<string | null> {
-  const key = process.env.MESHY_KEY;
-  if (!key) return null;
+  if (!isMeshyEnabled()) return null;
 
-  const base = "https://api.meshy.ai/openapi/v1/image-to-3d";
-  const headers = { authorization: `Bearer ${key}`, "content-type": "application/json" };
-
-  const createRes = await fetch(base, {
-    method: "POST",
-    headers,
-    body: JSON.stringify({ image_url: imageUrl, enable_pbr: true }),
-  });
-  if (!createRes.ok) {
-    throw new Error(`Meshy create ${createRes.status}: ${await createRes.text().catch(() => createRes.statusText)}`);
-  }
-  const { result: taskId } = (await createRes.json()) as { result?: string };
-  if (!taskId) return null;
+  const taskId = await createMeshyImageTo3dTask(imageUrl);
 
   // Poll (bounded) until the task succeeds or we give up.
   const deadline = Date.now() + 240_000;
   while (Date.now() < deadline) {
     await sleep(3_000);
-    const pollRes = await fetch(`${base}/${taskId}`, { headers });
-    if (!pollRes.ok) continue;
-    const task = (await pollRes.json()) as {
-      status?: string;
-      model_urls?: { glb?: string };
-    };
-    if (task.status === "SUCCEEDED" && task.model_urls?.glb) return task.model_urls.glb;
+    let task: MeshyTask;
+    try {
+      task = await getMeshyImageTo3dTask(taskId);
+    } catch {
+      continue;
+    }
+    if (task.status === "SUCCEEDED" && task.glbUrl) return task.glbUrl;
     if (task.status === "FAILED" || task.status === "CANCELED") return null;
   }
   return null;

@@ -9,6 +9,7 @@
     "lint": "next lint",
     "eval": "tsx eval/run.ts",
     "smoke:miroshark": "tsx scripts/smoke-miroshark.ts",
+    "skin:model": "tsx scripts/generate-skin-model.ts",
     "dev:miroshark": "node scripts/dev-with-miroshark.mjs"
   },
   "dependencies": {

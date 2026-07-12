@@ -1,0 +1,42 @@
+{
+  "beach": {
+    "skin": "beach",
+    "image": "/skin/beach.png",
+    "taskId": "019f5330-b002-7416-80ff-4546e6b8bf7f",
+    "status": "succeeded",
+    "progress": 100,
+    "updatedAt": "2026-07-11T22:03:17.346Z",
+    "thumbnail": "https://assets.meshy.ai/f2b95d34-4fa5-4f57-b297-4083c0915137/tasks/019f5330-b002-7416-80ff-4546e6b8bf7f/output/preview.png?Expires=1784066594&Signature=G2ul-p7wJkPGSHQz7-v~8JIM5rtGoq3ZhVWajjsLsr40vLZz~dT4oymuM9rpQLWgy~kD7fJ3h3wWO8osRxiQaAndHsSMV1jdOb5hZIHU4BHhBswV-FlUWTPTeloe8tHQS-oZElYGN~659T3f9mX7iKp9XZPtKrKRVmd0N~hmPYenkJ6jjI44zgdWmWLOPjy0odWMl7p2BSCxUWDGVkBxSq2vKY03F4MHr6XpEFryH~b2pEaR9OFSmqj6cVtrVxzNYZQWTGL16afe2bHuzvAQvoek1WLVlox0x6w-z~55B~~pPvsBjlHhC1hyDMU38bY421PQ0jVi9nW6R5VEm6EAIw__&Key-Pair-Id=K1VGYTHIYLM9UM",
+    "model": "/models/beach.glb"
+  },
+  "camp": {
+    "skin": "camp",
+    "image": "/skin/camp.png",
+    "taskId": "019f533c-0af3-73dc-aaed-41e6008bdfd7",
+    "status": "succeeded",
+    "progress": 100,
+    "updatedAt": "2026-07-11T22:14:06.921Z",
+    "thumbnail": "https://assets.meshy.ai/f2b95d34-4fa5-4f57-b297-4083c0915137/tasks/019f533c-0af3-73dc-aaed-41e6008bdfd7/output/preview.png?Expires=1784067246&Signature=ens5Y6cZBEexWUDIioa52Hn3fa219oVEGlXTdwSl4z5ObZSB1U~p0ri~x7JjJGrU4UvUi1idkgv-vUQ5tsgfLUeV7LfntcyD5MnDSsvMfasopuG7NCGudw~EWpft1smrw3Liv~izLxOCQKpp~YKP3SLjrGeCzT3bZ5J1R-iQjGuBILJNZgqCObKLVbcdKRJD1owIWpweGINo7kgbSEflmiX2QFFzbYHXUS4Nu-YeahgTPb-LjsUc2c8xU653403~3bZ823~LjWHH02og~~IKIpYN3TWfYMad6iWjTMn5gpnwqgPXaVLPxJgdevpydz2B9tkWiNVQgLaQEP~tLd~RQg__&Key-Pair-Id=K1VGYTHIYLM9UM",
+    "model": "/models/camp.glb"
+  },
+  "phantom-beach": {
+    "skin": "phantom-beach",
+    "image": "/skin/phantom-beach.png",
+    "taskId": "019f53c2-ec55-7fad-9866-a6c1317cc070",
+    "status": "succeeded",
+    "progress": 100,
+    "updatedAt": "2026-07-12T00:40:13.186Z",
+    "thumbnail": "https://assets.meshy.ai/f2b95d34-4fa5-4f57-b297-4083c0915137/tasks/019f53c2-ec55-7fad-9866-a6c1317cc070/output/preview.png?Expires=1784076010&Signature=I0kjYIT7RN~sD8wfeJnDKK9pK9lyVM0yHJielhDLB6J9nS1c5vGpG8SG3XlOPH2lvP0U0hl87okkX0Ph4PsdW6tnLwlN6rPROXC~XM7A4kruXY0gz0nD5khWXblmMEgUIGHzo22aNC65nuhy~C5Y9Zr~7eG2J-F6YUodVZBufShCJ91XQBBhpWi9ZDu7vgJKHHV4mcE0gp~QvThGkKvXjWe469w8xf9IkabMTLvKBDNmBErOqSSfGotu0INbl7fzXFaMeIlu5a4FwYbSejjKfqSkzs0y-~VBQyPCt~u8vtj9GA3KZl9gI5m2zSCE6jupbO4j~5XuK4MJyggWtqGVUA__&Key-Pair-Id=K1VGYTHIYLM9UM",
+    "model": "/models/phantom-beach.glb"
+  },
+  "phantom-pool": {
+    "skin": "phantom-pool",
+    "image": "/skin/phantom-pool.png",
+    "taskId": "019f53c2-f407-7506-b38d-838a5cd6a537",
+    "status": "succeeded",
+    "progress": 100,
+    "updatedAt": "2026-07-12T00:40:15.916Z",
+    "thumbnail": "https://assets.meshy.ai/f2b95d34-4fa5-4f57-b297-4083c0915137/tasks/019f53c2-f407-7506-b38d-838a5cd6a537/output/preview.png?Expires=1784076011&Signature=XqMIADYe1SyQHo0bHWA1CO8Tzr70GkRn0PMOGyECL9ix3BgbvpayqvDIw3lSHTwYlnSluIHVW3Gbk9oDb9xe1w9MCvCLeu5GfocvpCMUfPxqrlCjjcNtHhOfTI~Hh8Iw~ITu3lUOLp7PXLf8677Stm8JZ9COSoThSkMaAL2n4ARvO3yvKG2~xMK~3cDcCwbPfzJhY1HmBP-To2vWM-HNeywkz8JOTpm9ZVJTilYSK~5Ozsqua9zAY0rqmLzjdKiqm80mRQ-qQImCM~o6QpPbcJb28WJaK92mrPYIVwkpfKMt8NPfCchaMKN6ik1Q38HCsJO2cmNCIrF7KN~1IsjlMA__&Key-Pair-Id=K1VGYTHIYLM9UM",
+    "model": "/models/phantom-pool.glb"
+  }
+}

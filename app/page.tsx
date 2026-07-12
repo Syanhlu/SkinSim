@@ -12,20 +12,22 @@
 // The old VNG-corporate tool still lives at /classic.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ModelViewer } from "./components/model-viewer";
 
-type Step = "describe" | "clarify" | "plan" | "running" | "verdict";
+type Step = "describe" | "clarify" | "plan" | "versions" | "running" | "verdict";
 
-const STEP_ORDER: Step[] = ["describe", "clarify", "plan", "running", "verdict"];
+const STEP_ORDER: Step[] = ["describe", "clarify", "plan", "versions", "running", "verdict"];
 const STEP_LABELS: Record<Step, string> = {
   describe: "Describe",
   clarify: "Clarify",
   plan: "Plan",
+  versions: "Versions",
   running: "Run",
   verdict: "Verdict",
 };
 
 const EXAMPLE_PROMPTS = [
-  "A red Buy button lifts new-player conversion",
+  "Create a new skin for this character",
   "A Tết-themed promo boosts ARPU for returning players",
   "A shorter tutorial improves day-1 retention",
   "Zalo login instead of email raises signup completion",
@@ -85,6 +87,88 @@ const MOCK_VERDICT: MockVerdict = {
   range: "+1.9pp to +3.5pp",
   people: "12,400",
 };
+
+// ── Versions step: hardcoded skin library ────────────────────────────────────
+// DEMO SHORTCUT: the version prompt is keyword-matched against pre-generated
+// Meshy models (public/models/, built by `npm run skin:model`). To wire it for
+// real, replace matchVersionPrompt + the fake delay in generateVersion with
+// image gen → POST /api/skin → poll GET /api/skin?skin=… (see lib/creative/
+// skin-models.ts); the card UI needs no changes.
+const SKIN_LIBRARY = {
+  beach: { label: "Beach theme", image: "/skin/beach.png", model: "/models/beach.glb" },
+  camp: { label: "Camp theme", image: "/skin/camp.png", model: "/models/camp.glb" },
+  "phantom-beach": { label: "Beach Phantom", image: "/skin/phantom-beach.png", model: "/models/phantom-beach.glb" },
+  "phantom-pool": { label: "Poolside Phantom", image: "/skin/phantom-pool.png", model: "/models/phantom-pool.glb" },
+} as const;
+
+type SkinId = keyof typeof SKIN_LIBRARY;
+
+interface VersionSpec {
+  prompt: string;
+  status: "idle" | "generating" | "ready" | "unmatched";
+  skin: SkinId | null;
+}
+
+const emptyVersion = (): VersionSpec => ({ prompt: "", status: "idle", skin: null });
+
+// Each run draws from its own slice of the library: the character run maps
+// theme keywords to the character models, the Phantom run to the gun models.
+type SkinMatcher = Record<string, SkinId>;
+
+const CHARACTER_MATCHER: SkinMatcher = { beach: "beach", camp: "camp" };
+const PHANTOM_MATCHER: SkinMatcher = { beach: "phantom-beach", pool: "phantom-pool" };
+
+function matcherForHypothesis(hypothesis: string): SkinMatcher {
+  return /phantom|valorant|gun|weapon/i.test(hypothesis) ? PHANTOM_MATCHER : CHARACTER_MATCHER;
+}
+
+function matchVersionPrompt(prompt: string, matcher: SkinMatcher): SkinId | null {
+  const p = prompt.toLowerCase();
+  for (const [keyword, skin] of Object.entries(matcher)) {
+    if (p.includes(keyword)) return skin;
+  }
+  return null;
+}
+
+// ── Run history: hardcoded past runs ─────────────────────────────────────────
+// DEMO SHORTCUT: two completed pipeline runs, hand-written so the history panel
+// has content before runs are persisted anywhere. Reverting to one rehydrates
+// the flow — hypothesis, reference image, clarify answers, generated versions —
+// so the user can step back through it or rerun from any point.
+interface HistoryRun {
+  id: string;
+  hypothesis: string;
+  date: string;
+  /** Reference image attached on the describe step, under public/skin/. */
+  image: string;
+  answers: Record<string, string>;
+  versions: [{ prompt: string; skin: SkinId }, { prompt: string; skin: SkinId }];
+}
+
+const HISTORY_RUNS: HistoryRun[] = [
+  {
+    id: "character-skin",
+    hypothesis: "Create a new skin for this character",
+    date: "Jul 10, 2026",
+    image: "/skin/input.png",
+    answers: { baseline: "~5%", segment: "New players (first 7 days)", mde: "+1pp" },
+    versions: [
+      { prompt: "beach theme", skin: "beach" },
+      { prompt: "camp theme", skin: "camp" },
+    ],
+  },
+  {
+    id: "phantom-summer",
+    hypothesis: "Create summer skin designs for the Phantom gun in Valorant",
+    date: "Jul 11, 2026",
+    image: "/skin/input2.png",
+    answers: { baseline: "~2%", segment: "Paying users", mde: "+0.5pp" },
+    versions: [
+      { prompt: "beach theme", skin: "phantom-beach" },
+      { prompt: "pool theme", skin: "phantom-pool" },
+    ],
+  },
+];
 
 // ── Base palettes ────────────────────────────────────────────────────────────
 // Orange (#f1592a) stays the constant accent on every base. Only the background
@@ -174,18 +258,22 @@ const PATTERNS: Array<{ id: string; label: string }> = [
 export default function Home() {
   const [step, setStep] = useState<Step>("describe");
   const [hypothesis, setHypothesis] = useState("");
+  const [characterImage, setCharacterImage] = useState<string | null>(null);
+  const [versions, setVersions] = useState<[VersionSpec, VersionSpec]>([emptyVersion(), emptyVersion()]);
   const [thinking, setThinking] = useState<string | null>(null);
   const [qIndex, setQIndex] = useState(0);
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [runPct, setRunPct] = useState(0);
   const [themeId, setThemeId] = useState("vng");
   const [pattern, setPattern] = useState("grid");
+  const [historyOpen, setHistoryOpen] = useState(false);
   // Furthest step the user has reached — the rail lets them jump back to any
   // reached step; editing an earlier step collapses this frontier so the
   // downstream analysis has to be redone.
   const [maxReached, setMaxReached] = useState(0);
 
   const theme = useMemo(() => THEMES.find((t) => t.id === themeId) ?? THEMES[0], [themeId]);
+  const matcher = useMemo(() => matcherForHypothesis(hypothesis), [hypothesis]);
 
   // Remember the chosen base + texture across reloads while auditioning looks.
   // Key is versioned (v2) so an earlier saved choice doesn't pin the old default.
@@ -270,6 +358,37 @@ export default function Home() {
     else goTo("describe");
   }, [qIndex, goTo]);
 
+  // Editing a version prompt invalidates that version's model and everything
+  // downstream (run + verdict).
+  const setVersionPrompt = useCallback((index: number, prompt: string) => {
+    setVersions((prev) => {
+      const next = [...prev] as [VersionSpec, VersionSpec];
+      next[index] = { prompt, status: "idle", skin: null };
+      return next;
+    });
+    setMaxReached((m) => Math.min(m, 3));
+    setRunPct(0);
+  }, []);
+
+  // DEMO SHORTCUT: fake generation delay, then keyword-match the prompt to a
+  // pre-built Meshy model. Real wiring goes through POST /api/skin instead.
+  const generateVersion = useCallback((index: number) => {
+    setVersions((prev) => {
+      const next = [...prev] as [VersionSpec, VersionSpec];
+      next[index] = { ...next[index], status: "generating" };
+      return next;
+    });
+    window.setTimeout(() => {
+      setVersions((prev) => {
+        if (prev[index].status !== "generating") return prev;
+        const skin = matchVersionPrompt(prev[index].prompt, matcher);
+        const next = [...prev] as [VersionSpec, VersionSpec];
+        next[index] = { ...next[index], status: skin ? "ready" : "unmatched", skin };
+        return next;
+      });
+    }, 2200 + Math.random() * 900);
+  }, [matcher]);
+
   const runTest = useCallback(() => {
     setRunPct(0);
     goTo("running");
@@ -290,8 +409,28 @@ export default function Home() {
     return () => window.clearInterval(timer);
   }, [step, goTo]);
 
+  // Revert the whole flow to a past run: every step is rehydrated with that
+  // run's data and the rail unlocks through Versions, so the user lands on the
+  // generated models and can edit or rerun from any point.
+  const restoreRun = useCallback((run: HistoryRun) => {
+    setHypothesis(run.hypothesis);
+    setCharacterImage(run.image);
+    setAnswers(run.answers);
+    setQIndex(0);
+    setVersions([
+      { prompt: run.versions[0].prompt, status: "ready", skin: run.versions[0].skin },
+      { prompt: run.versions[1].prompt, status: "ready", skin: run.versions[1].skin },
+    ]);
+    setRunPct(0);
+    setMaxReached(STEP_ORDER.indexOf("versions"));
+    setStep("versions");
+    setHistoryOpen(false);
+  }, []);
+
   const restart = useCallback(() => {
     setHypothesis("");
+    setCharacterImage(null);
+    setVersions([emptyVersion(), emptyVersion()]);
     setAnswers({});
     setQIndex(0);
     setRunPct(0);
@@ -321,6 +460,9 @@ export default function Home() {
           <span className="brand-dot" /> SkinSim
         </span>
         <div className="top-links">
+          <button type="button" className="top-history" onClick={() => setHistoryOpen((v) => !v)}>
+            History
+          </button>
           <a href="/world?mode=replay&demo=kfc">Watch the crowd →</a>
           <a href="/classic">Classic view</a>
         </div>
@@ -328,11 +470,13 @@ export default function Home() {
 
       <StepRail activeIndex={activeIndex} maxReached={maxReached} onJump={jumpTo} />
 
-      <section className="flow">
+      <section className={`flow${step === "versions" ? " flow-wide" : ""}`}>
         {step === "describe" && (
           <DescribeStep
             hypothesis={hypothesis}
             setHypothesis={changeHypothesis}
+            image={characterImage}
+            onImage={setCharacterImage}
             onSubmit={submitIdea}
           />
         )}
@@ -350,13 +494,28 @@ export default function Home() {
         )}
 
         {step === "plan" && (
-          <PlanStep hypothesis={hypothesis} answers={answers} onRun={runTest} onBack={() => goTo("clarify")} />
+          <PlanStep hypothesis={hypothesis} answers={answers} onNext={() => goTo("versions")} onBack={() => goTo("clarify")} />
+        )}
+
+        {step === "versions" && (
+          <VersionsStep
+            versions={versions}
+            keywords={Object.keys(matcher)}
+            onPrompt={setVersionPrompt}
+            onGenerate={generateVersion}
+            onRun={runTest}
+            onBack={() => goTo("plan")}
+          />
         )}
 
         {step === "running" && <RunningStep pct={runPct} />}
 
         {step === "verdict" && <VerdictStep verdict={MOCK_VERDICT} onRestart={restart} />}
       </section>
+
+      {historyOpen && (
+        <HistoryPanel runs={HISTORY_RUNS} onRestore={restoreRun} onClose={() => setHistoryOpen(false)} />
+      )}
 
       {thinking && <ThinkingOverlay />}
 
@@ -403,16 +562,30 @@ function StepRail({
 function DescribeStep({
   hypothesis,
   setHypothesis,
+  image,
+  onImage,
   onSubmit,
 }: {
   hypothesis: string;
   setHypothesis: (v: string) => void;
+  image: string | null;
+  onImage: (dataUrl: string | null) => void;
   onSubmit: () => void;
 }) {
   const ref = useRef<HTMLTextAreaElement>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
   useEffect(() => {
     ref.current?.focus();
   }, []);
+
+  const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => onImage(typeof reader.result === "string" ? reader.result : null);
+    reader.readAsDataURL(file);
+  };
 
   return (
     <div className="describe fade-in">
@@ -436,6 +609,16 @@ function DescribeStep({
         </p>
 
         <div className="glass input-card">
+          {image && (
+            <div className="image-chip">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={image} alt="Character reference" />
+              <span>Image</span>
+              <button type="button" aria-label="Remove image" onClick={() => onImage(null)}>
+                ×
+              </button>
+            </div>
+          )}
           <textarea
             ref={ref}
             value={hypothesis}
@@ -447,7 +630,7 @@ function DescribeStep({
               }
             }}
             rows={1}
-            placeholder="Describe an ad, a promo, a price, or a UX change on your mind"
+            placeholder='Try "Create a new skin for this character" and attach the character'
             onInput={(e) => {
               const t = e.target as HTMLTextAreaElement;
               t.style.height = "auto";
@@ -455,7 +638,13 @@ function DescribeStep({
             }}
           />
           <div className="input-bar">
-            <span className="input-hint">Press Enter to begin</span>
+            <div className="input-left">
+              <button type="button" className="attach" onClick={() => fileRef.current?.click()}>
+                {image ? "Image" : "+ Image"}
+              </button>
+              <input ref={fileRef} type="file" accept="image/png,image/jpeg,image/webp" hidden onChange={handleFile} />
+              <span className="input-hint">Press Enter to begin</span>
+            </div>
             <button type="button" className="send" onClick={onSubmit} disabled={!hypothesis.trim()} aria-label="Begin">
               →
             </button>
@@ -538,12 +727,12 @@ function ClarifyStep({
 function PlanStep({
   hypothesis,
   answers,
-  onRun,
+  onNext,
   onBack,
 }: {
   hypothesis: string;
   answers: Record<string, string>;
-  onRun: () => void;
+  onNext: () => void;
   onBack: () => void;
 }) {
   return (
@@ -561,7 +750,7 @@ function PlanStep({
         </div>
 
         <div className="plan-rows">
-          <PlanRow label="Versions" value="Two versions, each shown to half the audience, split fairly" />
+          <PlanRow label="Versions" value="Two skin designs — you describe each on the next step, split fairly across the audience" />
           <PlanRow label="When we stop" value="At the planned sample, or when a safety check trips" />
           <PlanRow label="Safety checks" value="Crash rate and refund rate must not regress" />
         </div>
@@ -571,8 +760,8 @@ function PlanStep({
         <button type="button" className="ghost-btn" onClick={onBack}>
           Back
         </button>
-        <button type="button" className="primary-btn wide" onClick={onRun}>
-          Run the test
+        <button type="button" className="primary-btn wide" onClick={onNext}>
+          Design the versions
         </button>
       </div>
     </div>
@@ -597,7 +786,132 @@ function PlanRow({ label, value }: { label: string; value: string }) {
   );
 }
 
-// ── Step 4: Running ──────────────────────────────────────────────────────────
+// ── Step 4: Versions ─────────────────────────────────────────────────────────
+// One card per side of the A/B test: describe the skin, "generate" it, and the
+// 3D model appears in place. Generation is the hardcoded demo path documented
+// on SKIN_LIBRARY above.
+function VersionsStep({
+  versions,
+  keywords,
+  onPrompt,
+  onGenerate,
+  onRun,
+  onBack,
+}: {
+  versions: [VersionSpec, VersionSpec];
+  keywords: string[];
+  onPrompt: (index: number, prompt: string) => void;
+  onGenerate: (index: number) => void;
+  onRun: () => void;
+  onBack: () => void;
+}) {
+  const allReady = versions.every((v) => v.status === "ready");
+  return (
+    <div className="versions fade-in">
+      <h2 className="headline sm" data-text="Describe the two skins">Describe the two skins</h2>
+      <p className="subhead">
+        Each half of the audience sees one version. Tell the generator what each skin
+        should feel like.
+      </p>
+
+      <div className="version-grid">
+        {versions.map((spec, i) => (
+          <VersionCard
+            key={i}
+            index={i}
+            spec={spec}
+            keywords={keywords}
+            onPrompt={(v) => onPrompt(i, v)}
+            onGenerate={() => onGenerate(i)}
+          />
+        ))}
+      </div>
+
+      <div className="clarify-nav">
+        <button type="button" className="ghost-btn" onClick={onBack}>
+          Back
+        </button>
+        <button type="button" className="primary-btn wide" onClick={onRun} disabled={!allReady}>
+          {allReady ? "Run the test" : "Generate both skins to run"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function VersionCard({
+  index,
+  spec,
+  keywords,
+  onPrompt,
+  onGenerate,
+}: {
+  index: number;
+  spec: VersionSpec;
+  keywords: string[];
+  onPrompt: (v: string) => void;
+  onGenerate: () => void;
+}) {
+  const skin = spec.skin ? SKIN_LIBRARY[spec.skin] : null;
+  const canGenerate = spec.prompt.trim().length > 0 && spec.status !== "generating";
+  return (
+    <div className="glass version-card slide-in">
+      <div className="version-head">
+        <span className="version-tag">Version {index === 0 ? "A" : "B"}</span>
+        {spec.status === "ready" && skin && <span className="version-name">{skin.label}</span>}
+      </div>
+
+      <div className="version-stage">
+        {spec.status === "ready" && skin ? (
+          <ModelViewer
+            src={skin.model}
+            alt={`${skin.label} 3D skin`}
+            style={{ width: "100%", height: "100%" }}
+          />
+        ) : spec.status === "generating" ? (
+          <div className="version-empty">
+            <span className="big-spinner sm" />
+            <p>Sculpting the skin from your description…</p>
+          </div>
+        ) : spec.status === "unmatched" ? (
+          <div className="version-empty">
+            <p>
+              Nothing in the demo library matches that yet — try{" "}
+              {keywords.map((k, i) => (
+                <span key={k}>
+                  {i > 0 && " or "}
+                  <strong>{k} theme</strong>
+                </span>
+              ))}
+              .
+            </p>
+          </div>
+        ) : (
+          <div className="version-empty">
+            <p>The generated 3D skin appears here</p>
+          </div>
+        )}
+      </div>
+
+      <div className="version-input-row">
+        <input
+          className="answer-input"
+          value={spec.prompt}
+          onChange={(e) => onPrompt(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && canGenerate) onGenerate();
+          }}
+          placeholder={`e.g. "${keywords[index] ?? keywords[0]} theme"`}
+        />
+        <button type="button" className="primary-btn" onClick={onGenerate} disabled={!canGenerate}>
+          {spec.status === "generating" ? "Working…" : spec.status === "ready" ? "Redo" : "Generate"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ── Step 5: Running ──────────────────────────────────────────────────────────
 function RunningStep({ pct }: { pct: number }) {
   return (
     <div className="running fade-in">
@@ -618,7 +932,7 @@ function RunningStep({ pct }: { pct: number }) {
   );
 }
 
-// ── Step 5: Verdict ──────────────────────────────────────────────────────────
+// ── Step 6: Verdict ──────────────────────────────────────────────────────────
 function VerdictStep({ verdict, onRestart }: { verdict: MockVerdict; onRestart: () => void }) {
   const label = verdict.decision.toUpperCase();
   return (
@@ -642,6 +956,54 @@ function VerdictStep({ verdict, onRestart }: { verdict: MockVerdict; onRestart: 
         </div>
       </div>
     </div>
+  );
+}
+
+// ── History panel ────────────────────────────────────────────────────────────
+// Lists the hardcoded HISTORY_RUNS: reference image, hypothesis, and the two
+// skins each run produced. "Revert" rehydrates the whole flow with that run.
+function HistoryPanel({
+  runs,
+  onRestore,
+  onClose,
+}: {
+  runs: HistoryRun[];
+  onRestore: (run: HistoryRun) => void;
+  onClose: () => void;
+}) {
+  return (
+    <aside className="history-panel glass slide-in" aria-label="Past runs">
+      <div className="history-head">
+        <h2>Past runs</h2>
+        <button type="button" className="history-close" onClick={onClose} aria-label="Close history">
+          ×
+        </button>
+      </div>
+      <div className="history-list">
+        {runs.map((run) => (
+          <article key={run.id} className="history-run">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img className="history-ref" src={run.image} alt="Reference" />
+            <div className="history-body">
+              <p className="history-title">{run.hypothesis}</p>
+              <span className="history-date">{run.date}</span>
+              <div className="history-skins">
+                {run.versions.map((v) => (
+                  <figure key={v.skin}>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={SKIN_LIBRARY[v.skin].image} alt={SKIN_LIBRARY[v.skin].label} />
+                    <figcaption>{SKIN_LIBRARY[v.skin].label}</figcaption>
+                  </figure>
+                ))}
+              </div>
+              <button type="button" className="primary-btn history-restore" onClick={() => onRestore(run)}>
+                Revert to this run
+              </button>
+            </div>
+          </article>
+        ))}
+      </div>
+    </aside>
   );
 }
 
@@ -883,6 +1245,65 @@ const styles = `
   }
 
   .input-hint { font-size: 12px; color: var(--faint); }
+
+  .input-left { display: flex; align-items: center; gap: 12px; }
+
+  .attach {
+    font-family: inherit;
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--soft);
+    background: rgba(255,255,255,0.06);
+    border: 1px solid var(--glass-border);
+    border-radius: 999px;
+    padding: 7px 14px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    white-space: nowrap;
+  }
+
+  .attach:hover { color: var(--ink); border-color: var(--glass-border-strong); }
+
+  .image-chip {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 10px 8px 0 0;
+    padding: 6px 10px 6px 6px;
+    border-radius: var(--radius-sm);
+    background: rgba(255,255,255,0.06);
+    border: 1px solid var(--glass-border);
+    max-width: max-content;
+  }
+
+  .image-chip img {
+    width: 44px;
+    height: 44px;
+    object-fit: cover;
+    border-radius: 9px;
+    display: block;
+  }
+
+  .image-chip span { font-size: 12.5px; font-weight: 600; color: var(--soft); }
+
+  .image-chip button {
+    border: none;
+    background: rgba(255,255,255,0.1);
+    color: var(--ink);
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    font-size: 14px;
+    line-height: 1;
+    cursor: pointer;
+    display: grid;
+    place-items: center;
+  }
+
+  .image-chip button:hover { background: rgba(241,89,42,0.5); }
+
+  .stage[data-mode="light"] .image-chip,
+  .stage[data-mode="light"] .attach { background: rgba(255,255,255,0.55); }
 
   .send {
     width: 40px;
@@ -1367,6 +1788,76 @@ const styles = `
     .plan-row { grid-template-columns: 1fr; gap: 3px; }
   }
 
+  /* versions step */
+  .flow.flow-wide { max-width: 1080px; align-items: flex-start; }
+
+  .versions { width: 100%; text-align: center; margin-top: 18px; padding-bottom: 10px; }
+
+  .versions .subhead { max-width: 520px; }
+
+  .version-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+    margin-top: 24px;
+    text-align: left;
+  }
+
+  @media (max-width: 780px) {
+    .version-grid { grid-template-columns: 1fr; }
+  }
+
+  .version-card {
+    border-radius: var(--radius);
+    padding: 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  .version-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+
+  .version-tag {
+    font-size: 11.5px;
+    font-weight: 800;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    color: var(--vng-orange);
+  }
+
+  .version-name { font-size: 13.5px; font-weight: 700; color: var(--ink); }
+
+  .version-stage {
+    position: relative;
+    height: clamp(200px, 32vh, 280px);
+    border-radius: var(--radius-sm);
+    background: rgba(0,0,0,0.28);
+    overflow: hidden;
+  }
+
+  .stage[data-mode="light"] .version-stage { background: rgba(40,30,20,0.10); }
+
+  .version-empty {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    padding: 0 28px;
+    text-align: center;
+    color: var(--faint);
+  }
+
+  .version-empty p { margin: 0; font-size: 14px; line-height: 1.55; }
+  .version-empty strong { color: var(--soft); }
+
+  .big-spinner.sm { width: 44px; height: 44px; border-width: 5px; }
+
+  .version-input-row { display: flex; gap: 10px; }
+  .version-input-row .answer-input { flex: 1; }
+  .version-input-row .primary-btn { flex: none; }
+
   /* running step */
   .running { width: 100%; text-align: center; margin-top: -80px; }
 
@@ -1469,6 +1960,78 @@ const styles = `
   }
 
   .verdict-actions { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+
+  /* history panel */
+  .top-history {
+    font-family: inherit;
+    font-size: 13.5px;
+    font-weight: 500;
+    color: var(--soft);
+    background: none;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    transition: color 0.15s ease;
+  }
+
+  .top-history:hover { color: var(--ink); }
+
+  .history-panel {
+    position: fixed;
+    top: 72px;
+    right: 18px;
+    width: min(370px, calc(100vw - 36px));
+    max-height: calc(100vh - 96px);
+    border-radius: var(--radius);
+    padding: 18px;
+    z-index: 35;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  .history-head { display: flex; align-items: center; justify-content: space-between; }
+  .history-head h2 { margin: 0; font-size: 16px; font-weight: 700; letter-spacing: -0.01em; }
+
+  .history-close {
+    border: none;
+    background: rgba(255,255,255,0.1);
+    color: var(--ink);
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    font-size: 16px;
+    line-height: 1;
+    cursor: pointer;
+    display: grid;
+    place-items: center;
+  }
+
+  .history-close:hover { background: rgba(241,89,42,0.5); }
+
+  .history-list { overflow-y: auto; display: flex; flex-direction: column; gap: 12px; }
+
+  .history-run {
+    display: grid;
+    grid-template-columns: 64px 1fr;
+    gap: 12px;
+    padding: 12px;
+    border-radius: var(--radius-sm);
+    background: rgba(255,255,255,0.05);
+    border: 1px solid var(--glass-border);
+  }
+
+  .history-ref { width: 64px; height: 64px; object-fit: cover; border-radius: 10px; }
+  .history-title { margin: 0 0 2px; font-size: 13.5px; font-weight: 600; line-height: 1.4; color: var(--ink); }
+  .history-date { font-size: 11.5px; color: var(--faint); }
+  .history-skins { display: flex; gap: 8px; margin: 10px 0 12px; }
+  .history-skins figure { margin: 0; text-align: center; }
+  .history-skins img { width: 54px; height: 54px; object-fit: cover; border-radius: 8px; display: block; }
+  .history-skins figcaption { font-size: 10.5px; color: var(--faint); margin-top: 4px; }
+  .history-restore { padding: 8px 16px; font-size: 12.5px; }
+
+  .stage[data-mode="light"] .history-run { background: rgba(255,255,255,0.5); }
+  .stage[data-mode="light"] .history-close { background: rgba(40,30,20,0.1); }
 
   /* thinking overlay — just a big orange spinner over a blurred backdrop */
   .thinking-overlay {

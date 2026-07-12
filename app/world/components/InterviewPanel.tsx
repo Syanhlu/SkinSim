@@ -172,7 +172,7 @@ export default function InterviewPanel({
           placeholder="Hỏi nhân vật này…"
           disabled={busy}
         />
-        <button type="button" className="world-btn" onClick={() => ask(draft)} disabled={busy || !draft.trim()}>
+        <button type="button" className="world-btn primary" onClick={() => ask(draft)} disabled={busy || !draft.trim()}>
           Ask
         </button>
       </div>
