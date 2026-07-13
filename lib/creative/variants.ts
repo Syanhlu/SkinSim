@@ -110,8 +110,8 @@ export async function proposeVariants(
         "(think KFC Vietnam vs Lotteria/Jollibee, ShopeeFood/GrabFood price wars, Gen Z Threads discourse).",
         "Given an experiment hypothesis, propose 2-3 ad variants for a synthetic A/B test.",
         "Rules:",
-        "- `text` is the ad copy shown to consumers: natural, punchy VIETNAMESE, max 140 characters,",
-        "  with a concrete offer, price point, or hook (e.g. 'combo 89k', 'mua 1 tặng 1 thứ Ba').",
+        "- `text` is the ad copy shown to consumers: natural, punchy ENGLISH, max 140 characters,",
+        "  with a concrete offer, price point, or hook (e.g. '89k combo', 'buy 1 get 1 free on Tuesdays').",
         "- Each variant takes a DIFFERENT angle: price (value/discount), social (friends/sharing/community),",
         "  novelty (new flavor/limited drop/trend). Never repeat an angle.",
         "- `strategyNote` is ONE line in English for the operator: target segment + why this angle could win.",
@@ -173,8 +173,8 @@ function fallbackProposal(hypothesis: string): VariantProposal {
     name: "A",
     angle: "price",
     text: mentionsApp
-      ? "Gà Rán Giòn Cay — combo 89k, giảm thêm 30% cho đơn đầu tiên đặt trên app. Nhanh tay kẻo hết!"
-      : "Combo Gà Rán 89k — no bụng cả nhóm, rẻ hơn cơm trưa văn phòng. Chỉ tuần này!",
+      ? "Spicy Crispy Chicken — 89k combo, extra 30% off your first order on the app. Grab it before it's gone!"
+      : "89k Fried Chicken Combo — feeds the whole crew for less than an office lunch. This week only!",
     strategyNote: mentionsStudent
       ? "Hard price anchor for price-sensitive students; a concrete 89k beats vague % discounts in inflation-wary 2026."
       : "Value anchor for price-sensitive segments (students, families); concrete price + first-order hook drives trial.",
@@ -186,8 +186,8 @@ function fallbackProposal(hypothesis: string): VariantProposal {
     name: "B",
     angle: "social",
     text: mentionsCombo
-      ? "KFC x Bạn Thân — mua 1 combo tặng 1 mỗi thứ Ba. Rủ cả hội, chia đôi vui gấp đôi!"
-      : "KFC x Bạn Thân — mua 1 tặng 1 thứ Ba hàng tuần, chỉ tại cửa hàng. Rủ bạn đi liền!",
+      ? "KFC x Best Friends — buy 1 combo get 1 free every Tuesday. Bring the whole squad, double the fun!"
+      : "KFC x Best Friends — buy 1 get 1 free every Tuesday, in-store only. Grab a friend and go!",
     strategyNote:
       "Buy-one-get-one leans on group dining culture and friend referrals; wins if sharing beats solo value on this audience.",
     imagePrompt:
@@ -198,8 +198,8 @@ function fallbackProposal(hypothesis: string): VariantProposal {
     name: "C",
     angle: "novelty",
     text: mentionsSpicy
-      ? "Vị mới cực cháy: Gà Giòn Cay Sốt Ớt Sữa — chỉ bán 2 tuần. Dám thử độ cay này không?"
-      : "Ra mắt Gà Giòn Sốt Trứng Muối — vị mới chỉ có 2 tuần. Thử ngay kẻo lỡ trend!",
+      ? "New heat alert: Crispy Chicken in Creamy Chili Sauce — 2 weeks only. Think you can handle it?"
+      : "Introducing Salted Egg Crispy Chicken — new flavor, 2 weeks only. Try it before the trend passes!",
     strategyNote:
       "Limited-time new flavor targets Gen Z trend-chasers on Threads/TikTok; scarcity framing drives fast trial and talk.",
     imagePrompt: mentionsSpicy

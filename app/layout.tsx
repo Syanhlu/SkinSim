@@ -1,4 +1,5 @@
 import { Poppins } from "next/font/google";
+import type { Metadata } from "next";
 
 // VNG's brand typeface is SVN-Gilroy (Gilroy family). Gilroy is not a free web
 // font, so we load Poppins — the standard geometric-sans stand-in for Gilroy —
@@ -10,9 +11,39 @@ const brand = Poppins({
   display: "swap",
 });
 
-export const metadata = {
-  title: "Agamotto — Synthetic A/B Testing",
-  description: "Test your ads on a simulated Vietnamese audience before spending money on real ones",
+const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://vng-ab-test-agent.vercel.app";
+const title = "Agamotto | Synthetic A/B Testing for Game Teams";
+const description =
+  "Prototype game skins, test them on a simulated Vietnamese audience, and get an evidence-backed ship, iterate, or kill verdict before launch.";
+const previewImage = {
+  url: "/vng-hero.png",
+  width: 1672,
+  height: 941,
+  alt: "Agamotto game-skin testing preview artwork",
+};
+
+export const metadata: Metadata = {
+  metadataBase: new URL(siteUrl),
+  applicationName: "Agamotto",
+  title,
+  description,
+  alternates: {
+    canonical: "/",
+  },
+  openGraph: {
+    type: "website",
+    url: "/",
+    siteName: "Agamotto",
+    title,
+    description,
+    images: [previewImage],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title,
+    description,
+    images: [previewImage.url],
+  },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

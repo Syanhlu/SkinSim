@@ -159,7 +159,7 @@ export async function POST(req: Request) {
         }),
         propose_variants: tool({
           description:
-            "Propose 2-3 Vietnamese ad-copy variants (price/social/novelty angles) with strategy notes for a hypothesis. Labeled 'agent' or deterministic 'fallback'. The human edits before launch.",
+            "Propose 2-3 English ad-copy variants (price/social/novelty angles) with strategy notes for a hypothesis. Labeled 'agent' or deterministic 'fallback'. The human edits before launch.",
           inputSchema: z.object({
             hypothesis: z.string(),
             metric: z.string().optional(),

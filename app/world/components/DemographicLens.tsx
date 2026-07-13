@@ -21,7 +21,7 @@ const LENS_PALETTE = [
 ];
 
 export function agentSegment(agent: WorldAgent, mode: LensMode): string | null {
-  if (mode === "region") return agent.demographics.region ?? "khác";
+  if (mode === "region") return agent.demographics.region ?? "other";
   if (mode === "age") {
     const age = agent.demographics.age;
     if (age === undefined) return "?";

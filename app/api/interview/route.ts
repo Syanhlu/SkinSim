@@ -65,7 +65,9 @@ export async function POST(request: Request): Promise<NextResponse> {
   // agent_name. Send both so either backend revision accepts the call.
   const payload: Record<string, unknown> = {
     simulation_id: simulationId,
-    prompt: question,
+    // English-only demo surface: the persona may be Vietnamese, so pin the
+    // reply language server-side (the UI only ever shows the user's question).
+    prompt: `${question}\n\n(Reply in English only.)`,
   };
   if (agentName) payload.agent_name = agentName;
   const numericAgentId =

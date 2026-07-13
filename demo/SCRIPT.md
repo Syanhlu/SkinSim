@@ -26,7 +26,7 @@ Read the **bold lines** aloud; *(italics = what you do on screen while talking)*
 
 > **"Now watch. These are 100 synthetic Vietnamese consumers — grounded in real census
 > data: names, regions, ages, occupations from the Nemotron Vietnam persona pack. Not
-> random bots — students in Đà Nẵng, office workers in Hà Nội, skeptical food reviewers."**
+> random bots — students in Da Nang, office workers in Hanoi, skeptical food reviewers."**
 
 > **"And here's the trick: it's the *same* 100 people on both sides. Left half sees
 > variant A, right half sees variant B. Two realities, one audience — a perfectly

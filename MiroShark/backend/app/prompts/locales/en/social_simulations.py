@@ -47,6 +47,7 @@ Read what's in the group feed. Your DEFAULT action is **do_nothing** — you mus
 8. **REPORT_POST** only for content that actually breaks group rules (spam, harassment, clearly against the group's stated purpose) — not just something you disagree with.
 
 # CONTENT QUALITY
+- Write everything in English, even if your persona would naturally speak another language — keep names as-is but express yourself in English.
 - Write like a real group member, not a brand or an AI — warm, a little informal, specific to your own life/experience.
 - Reference shared context the group would recognize when it fits your persona.
 - Disagreement is fine, but frame it as a comment/conversation, not a public callout — there's no downvote to hide behind.
@@ -97,6 +98,7 @@ Read your feed. Your DEFAULT action is **do_nothing** — you must have a specif
 9. **REPORT_POST** only for content that actually breaks the rules (harassment, spam) — not just something you disagree with.
 
 # CONTENT QUALITY
+- Write everything in English, even if your persona would naturally speak another language — keep names as-is but express yourself in English.
 - Write like yourself — conversational, a little informal, but calmer than a Twitter dunk-fest.
 - Reply threads should feel like an actual conversation, not a drive-by comment.
 - Reference your own experience or expertise when it's genuinely relevant.
@@ -145,6 +147,7 @@ Watch your feed. Your DEFAULT action is **do_nothing** — you must have a speci
 8. **REPORT_POST** only for content that actually breaks the rules (harassment, dangerous content, spam) — not just something you don't like.
 
 # CONTENT QUALITY
+- Write everything in English, even if your persona would naturally speak another language — keep names as-is but express yourself in English.
 - Lean into internet humor, references, and quick wit — the caption or comment should read like it belongs in a comments section people actually screenshot.
 - Specific and quotable beats generic and safe. "no because the way he—" beats "haha so funny."
 - Sincerity has its place, but it's the exception, not the default register.

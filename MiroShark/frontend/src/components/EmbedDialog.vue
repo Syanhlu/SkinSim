@@ -3814,14 +3814,11 @@ const reproPlatformsLabel = computed(() => {
   const p = reproBlob.value?.platforms
   if (!p) return ''
   const parts = []
-<<<<<<< HEAD
   if (p.twitter) parts.push(tr('Twitter', 'Twitter', { de: 'Twitter' , fr: 'Twitter'}))
   if (p.reddit) parts.push(tr('Reddit', 'Reddit', { de: 'Reddit' , fr: 'Reddit'}))
-=======
   if (p.threads) parts.push(tr('Threads', 'Threads', { de: 'Threads' }))
   if (p.facebook) parts.push(tr('Facebook', 'Facebook', { de: 'Facebook' }))
   if (p.tiktok) parts.push(tr('TikTok', 'TikTok', { de: 'TikTok' }))
->>>>>>> 46b635b (feat: wire up TikTok as an opt-in standalone simulation platform)
   if (p.polymarket) {
     const count = Number(p.polymarket_market_count || 1)
     parts.push(`${tr('Polymarket', 'Polymarket', { de: 'Polymarket' , fr: 'Polymarket'})} ×${count}`)

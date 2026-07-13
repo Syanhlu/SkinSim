@@ -133,13 +133,13 @@ export default function PromptDock({
           className="variant-input-a"
           value={variantA}
           onChange={(event) => setVariantA(event.target.value)}
-          placeholder="Variant A ad copy (tiếng Việt)"
+          placeholder="Variant A ad copy"
         />
         <input
           className="variant-input-b"
           value={variantB}
           onChange={(event) => setVariantB(event.target.value)}
-          placeholder="Variant B ad copy (tiếng Việt)"
+          placeholder="Variant B ad copy"
         />
       </div>
       <div className="dock-actions">

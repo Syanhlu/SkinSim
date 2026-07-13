@@ -28,7 +28,7 @@ const STEP_LABELS: Record<Step, string> = {
 
 const EXAMPLE_PROMPTS = [
   "Create a new skin for this character",
-  "A Tết-themed promo boosts ARPU for returning players",
+  "A Tet-themed promo boosts ARPU for returning players",
   "A shorter tutorial improves day-1 retention",
   "Zalo login instead of email raises signup completion",
   "A limited-time skin bundle increases first purchase rate",

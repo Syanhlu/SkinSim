@@ -90,7 +90,7 @@ function AgentSpriteImpl({ agent, store, lens, silhouette, isHighlighted, onClic
       <div className="sprite-inner" style={{ animationDelay: `${swayDelay}ms` }}>
         <LottieAgent stance={snapshot.stance} seed={seed} />
       </div>
-      {isHighlighted && !silhouette && <span className="interview-flag">hỏi tôi!</span>}
+      {isHighlighted && !silhouette && <span className="interview-flag">ask me!</span>}
       <div className="agent-tooltip">
         <div className="tooltip-name">{agent.name}</div>
         {meta && <div className="tooltip-meta">{meta}</div>}

@@ -20,9 +20,9 @@ interface ChatMessage {
 const historyCache = new Map<string, ChatMessage[]>();
 
 const DEFAULT_QUESTIONS = [
-  "Bạn nghĩ gì về quảng cáo này?",
+  "What do you think of this ad?",
   "Why didn't this convince you?",
-  "Bạn có định mua thử không?",
+  "Would you actually buy it?",
 ];
 
 export default function InterviewPanel({
@@ -56,7 +56,7 @@ export default function InterviewPanel({
     setMessages((current) => [
       ...current,
       { from: "user", text: trimmed },
-      { from: "agent", text: "đang suy nghĩ…", pending: true },
+      { from: "agent", text: "thinking…", pending: true },
     ]);
 
     const answer = await fetchAnswer(trimmed);
@@ -104,14 +104,14 @@ export default function InterviewPanel({
       return { text: canned[asked % canned.length].answer, source: "canned" };
     }
     return {
-      text: "『engine offline』 nhân vật này chưa có câu trả lời thu sẵn. Hãy thử một nhân vật được đánh dấu.",
+      text: "[engine offline] this persona has no pre-recorded answers yet. Try one of the highlighted personas.",
       source: "offline",
     };
   }
 
   const demo = agent.demographics;
   const metaLine = [
-    demo.age !== undefined ? `${demo.age} tuổi` : null,
+    demo.age !== undefined ? `${demo.age} yrs` : null,
     demo.gender,
     demo.occupation,
     demo.region,
@@ -169,7 +169,7 @@ export default function InterviewPanel({
           onKeyDown={(event) => {
             if (event.key === "Enter") ask(draft);
           }}
-          placeholder="Hỏi nhân vật này…"
+          placeholder="Ask this persona…"
           disabled={busy}
         />
         <button type="button" className="world-btn primary" onClick={() => ask(draft)} disabled={busy || !draft.trim()}>
